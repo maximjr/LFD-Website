@@ -1,0 +1,135 @@
+import { motion } from 'motion/react';
+import { Video, Users, MessageSquare, ShieldCheck } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+
+export default function LiveSeminars() {
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const access = localStorage.getItem('seminar_access');
+    setHasAccess(access === 'true');
+  }, []);
+
+  if (hasAccess === null) return null;
+
+  if (!hasAccess) {
+    return <Navigate to="/seminars" replace />;
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen bg-slate-900 text-white">
+      {/* Header */}
+      <header className="bg-slate-800 border-b border-slate-700 py-6">
+        <div className="container-custom flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center">
+              <Video className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">LIVE: Chronic Disease Management</h1>
+              <p className="text-sm text-emerald-400 flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Live Now • 124 watching
+              </p>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-6">
+            <div className="flex items-center gap-2 text-slate-300">
+              <Users className="w-5 h-5" />
+              <span className="font-medium">124 Participants</span>
+            </div>
+            <div className="flex items-center gap-2 text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+              <ShieldCheck className="w-5 h-5" />
+              <span className="font-bold text-sm">Verified Access</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-grow py-8">
+        <div className="container-custom grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Video Player Placeholder */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl relative group border border-slate-700">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <Video className="w-20 h-20 text-slate-700 mx-auto mb-4" />
+                  <p className="text-slate-500 font-medium text-lg">Connecting to live stream...</p>
+                </div>
+              </div>
+              <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <button className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center backdrop-blur-md transition-all">
+                      <Video className="w-5 h-5" />
+                    </button>
+                    <div className="h-1 w-48 bg-white/20 rounded-full overflow-hidden">
+                      <div className="h-full w-1/3 bg-emerald-500"></div>
+                    </div>
+                  </div>
+                  <button className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-sm transition-all">
+                    HD 1080p
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700">
+              <h2 className="text-2xl font-bold mb-4">About this Seminar</h2>
+              <p className="text-slate-400 leading-relaxed text-lg">
+                In this session, our lead specialist Dr. Robert Wilson discusses advanced strategies for managing chronic conditions through nutrition, lifestyle changes, and modern medical interventions. This seminar is part of our monthly series dedicated to patient empowerment and holistic health.
+              </p>
+            </div>
+          </div>
+
+          {/* Chat Sidebar Placeholder */}
+          <div className="flex flex-col h-[600px] lg:h-auto bg-slate-800 rounded-3xl border border-slate-700 overflow-hidden">
+            <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+              <h3 className="font-bold flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-emerald-500" />
+                Live Chat
+              </h3>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Only Verified</span>
+            </div>
+            
+            <div className="flex-grow p-6 space-y-6 overflow-y-auto">
+              {[
+                { user: "Sarah J.", msg: "This is so helpful, thank you doctor!" },
+                { user: "Michael C.", msg: "What about the diet plan for hypertension?" },
+                { user: "Emily D.", msg: "The presentation is very clear." },
+                { user: "Admin", msg: "Welcome everyone! Feel free to ask questions.", isAdmin: true }
+              ].map((chat, i) => (
+                <div key={i} className="flex flex-col gap-1">
+                  <span className={`text-xs font-bold uppercase tracking-wider ${chat.isAdmin ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    {chat.user}
+                  </span>
+                  <p className="text-slate-300 text-sm bg-slate-900/50 p-3 rounded-xl border border-slate-700/50">
+                    {chat.msg}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 bg-slate-900/50 border-t border-slate-700">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Type your message..." 
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                />
+                <button className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-all">
+                  <MessageSquare className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
