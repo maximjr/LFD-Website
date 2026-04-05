@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   onSnapshot, 
@@ -10,7 +11,8 @@ import {
   addDoc,
   getDocs,
   limit,
-  serverTimestamp
+  serverTimestamp,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
@@ -46,10 +48,12 @@ interface Subscription {
   phone: string;
   planType: 'monthly' | 'yearly';
   paymentMethod: string;
-  status: 'pending' | 'active' | 'expired';
+  status: 'pending' | 'active' | 'expired' | 'deleted';
   createdAt: Timestamp;
   startDate?: Timestamp;
   expiryDate?: Timestamp;
+  deleted?: boolean;
+  deletedAt?: Timestamp | null;
 }
 
 interface ActivationKey {
@@ -62,20 +66,57 @@ interface ActivationKey {
   emailSentAt?: Timestamp;
   emailAttempts: number;
   emailStatus: 'pending' | 'sent' | 'retrying' | 'failed';
+  deleted?: boolean;
+  createdAt?: Timestamp;
 }
 
 const AdminDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'subscriptions' | 'livestream'>('subscriptions');
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'subscriptions' | 'livestream' | 'trash'>('subscriptions');
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [activationKeys, setActivationKeys] = useState<ActivationKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'expired'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'expired' | 'deleted'>('all');
   const [planFilter, setPlanFilter] = useState<'all' | 'monthly' | 'yearly'>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [generatedKey, setGeneratedKey] = useState<{ key: string, email: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate('/');
+    } catch (error) {
+      console.error('Failed to log out', error);
+    }
+  };
+
+  const logAction = async (action: string, userId: string | undefined, subscriptionId: string) => {
+    try {
+      await addDoc(collection(db, "adminLogs"), {
+        action,
+        userId: userId || 'unknown',
+        subscriptionId,
+        performedBy: auth.currentUser?.uid || 'admin',
+        timestamp: serverTimestamp()
+      });
+    } catch (e) {
+      console.error("Failed to log action", e);
+    }
+  };
 
   useEffect(() => {
     const qSubs = query(collection(db, 'subscriptions'), orderBy('createdAt', 'desc'));
@@ -128,25 +169,29 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleRunMaintenance = async () => {
-    if (!window.confirm("Are you sure you want to run system maintenance? This will clean up old records and retry failed emails.")) {
-      return;
-    }
-    
-    try {
-      const response = await fetch('/api/admin/maintenance', {
-        method: 'POST',
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        alert("Maintenance completed successfully! Check the server logs for details.");
-      } else {
-        alert("Maintenance failed: " + data.message);
+    setConfirmModal({
+      isOpen: true,
+      title: 'Run System Maintenance',
+      message: 'Are you sure you want to run system maintenance? This will clean up old records and retry failed emails.',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          const response = await fetch('/api/admin/maintenance', {
+            method: 'POST',
+          });
+          
+          const data = await response.json();
+          if (data.success) {
+            alert("Maintenance completed successfully! Check the server logs for details.");
+          } else {
+            alert("Maintenance failed: " + data.message);
+          }
+        } catch (error) {
+          console.error("Error triggering maintenance:", error);
+          alert("An error occurred while triggering maintenance.");
+        }
       }
-    } catch (error) {
-      console.error("Error triggering maintenance:", error);
-      alert("An error occurred while triggering maintenance.");
-    }
+    });
   };
 
   const generateMockData = async () => {
@@ -222,19 +267,98 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleDeactivate = async (id: string) => {
-    setProcessingId(id);
+  const handleSoftDelete = async (sub: Subscription) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Deactivate User',
+      message: 'Are you sure you want to deactivate this user? They will lose access to the platform.',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setProcessingId(sub.id);
+        try {
+          const subRef = doc(db, 'subscriptions', sub.id);
+          await updateDoc(subRef, {
+            status: 'deleted',
+            deleted: true,
+            deletedAt: serverTimestamp()
+          });
+
+          // Soft delete associated activation keys
+          const userKeys = activationKeys.filter(k => k.userId === sub.userId);
+          for (const key of userKeys) {
+            await updateDoc(doc(db, 'activationKeys', key.id), {
+              deleted: true
+            });
+          }
+
+          await logAction('soft_delete', sub.userId, sub.id);
+          alert("User deactivated successfully");
+        } catch (err) {
+          console.error("Deactivation error:", err);
+          alert("Error deactivating user");
+        } finally {
+          setProcessingId(null);
+        }
+      }
+    });
+  };
+
+  const handleRestore = async (sub: Subscription) => {
+    setProcessingId(sub.id);
     try {
-      const subRef = doc(db, 'subscriptions', id);
+      const subRef = doc(db, 'subscriptions', sub.id);
       await updateDoc(subRef, {
-        status: 'expired'
+        status: 'active',
+        deleted: false,
+        deletedAt: null
       });
+
+      // Restore associated activation keys
+      const userKeys = activationKeys.filter(k => k.userId === sub.userId);
+      for (const key of userKeys) {
+        await updateDoc(doc(db, 'activationKeys', key.id), {
+          deleted: false
+        });
+      }
+
+      await logAction('restore', sub.userId, sub.id);
+      alert("User restored successfully");
     } catch (err) {
-      console.error("Deactivation error:", err);
-      alert("Failed to deactivate subscription.");
+      console.error("Restore error:", err);
+      alert("Error restoring user");
     } finally {
       setProcessingId(null);
     }
+  };
+
+  const handlePermanentDelete = async (sub: Subscription) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Permanently Delete User',
+      message: 'Are you sure you want to permanently delete this user? This action cannot be undone.',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setProcessingId(sub.id);
+        try {
+          // Delete associated activation keys
+          const userKeys = activationKeys.filter(k => k.userId === sub.userId);
+          for (const key of userKeys) {
+            await deleteDoc(doc(db, 'activationKeys', key.id));
+          }
+
+          // Delete subscription
+          await deleteDoc(doc(db, 'subscriptions', sub.id));
+
+          await logAction('permanent_delete', sub.userId, sub.id);
+          alert("User permanently deleted");
+        } catch (err) {
+          console.error("Delete error:", err);
+          alert("Error deleting user");
+        } finally {
+          setProcessingId(null);
+        }
+      }
+    });
   };
 
   const generateUniqueKey = (plan: 'monthly' | 'yearly') => {
@@ -322,6 +446,10 @@ const AdminDashboard: React.FC = () => {
   };
 
   const filteredSubscriptions = subscriptions.filter(sub => {
+    // Filter by tab (trash vs active)
+    if (activeTab === 'trash' && !sub.deleted) return false;
+    if (activeTab === 'subscriptions' && sub.deleted) return false;
+
     const matchesSearch = 
       sub.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       sub.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -363,7 +491,7 @@ const AdminDashboard: React.FC = () => {
               Run Maintenance
             </button>
             <button 
-              onClick={() => signOut(auth)}
+              onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
               <LogOut size={18} />
@@ -373,20 +501,30 @@ const AdminDashboard: React.FC = () => {
         </header>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-8">
+        <div className="flex border-b border-gray-200 mb-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('subscriptions')}
-            className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
+            className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
               activeTab === 'subscriptions'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Subscriptions & Keys
+            Active Users
+          </button>
+          <button
+            onClick={() => setActiveTab('trash')}
+            className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
+              activeTab === 'trash'
+                ? 'border-rose-600 text-rose-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Deleted Users (Trash)
           </button>
           <button
             onClick={() => setActiveTab('livestream')}
-            className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 flex items-center gap-2 ${
+            className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'livestream'
                 ? 'border-emerald-600 text-emerald-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -507,6 +645,42 @@ const AdminDashboard: React.FC = () => {
 
         {/* Table Container */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          {/* Confirm Modal */}
+          <AnimatePresence>
+            {confirmModal.isOpen && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+              >
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+                >
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">{confirmModal.title}</h3>
+                  <p className="text-slate-600 mb-6">{confirmModal.message}</p>
+                  <div className="flex justify-end gap-3">
+                    <button 
+                      onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                      className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={confirmModal.onConfirm}
+                      className="px-4 py-2 bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-700 transition-colors"
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Generated Key Modal */}
           <AnimatePresence>
             {generatedKey && (
@@ -668,33 +842,61 @@ const AdminDashboard: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          {sub.status !== 'active' && (
+                          {activeTab === 'trash' ? (
                             <>
                               <button 
-                                onClick={() => handleActivate(sub.id, sub.planType)}
+                                onClick={() => handleRestore(sub)}
                                 disabled={processingId === sub.id}
                                 className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                {processingId === sub.id ? '...' : 'Activate'}
+                                {processingId === sub.id ? '...' : 'Restore'}
                               </button>
                               <button 
-                                onClick={() => handleGenerateKey(sub)}
+                                onClick={() => handlePermanentDelete(sub)}
                                 disabled={processingId === sub.id}
-                                className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                                title="Generate Unique Activation Key"
+                                className="px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Key size={12} /> Key
+                                {processingId === sub.id ? '...' : 'Delete'}
                               </button>
                             </>
-                          )}
-                          {sub.status === 'active' && (
-                            <button 
-                              onClick={() => handleDeactivate(sub.id)}
-                              disabled={processingId === sub.id}
-                              className="px-3 py-1.5 bg-white border border-rose-200 text-rose-600 text-xs font-bold rounded-lg hover:bg-rose-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {processingId === sub.id ? '...' : 'Deactivate'}
-                            </button>
+                          ) : (
+                            <>
+                              {sub.status !== 'active' && (
+                                <>
+                                  <button 
+                                    onClick={() => handleActivate(sub.id, sub.planType)}
+                                    disabled={processingId === sub.id}
+                                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {processingId === sub.id ? '...' : 'Activate'}
+                                  </button>
+                                  <button 
+                                    onClick={() => handleGenerateKey(sub)}
+                                    disabled={processingId === sub.id}
+                                    className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                    title="Generate Unique Activation Key"
+                                  >
+                                    <Key size={12} /> Key
+                                  </button>
+                                </>
+                              )}
+                              {sub.status === 'active' && (
+                                <button 
+                                  onClick={() => handleSoftDelete(sub)}
+                                  disabled={processingId === sub.id}
+                                  className="px-3 py-1.5 bg-white border border-rose-200 text-rose-600 text-xs font-bold rounded-lg hover:bg-rose-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {processingId === sub.id ? '...' : 'Deactivate'}
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => handlePermanentDelete(sub)}
+                                disabled={processingId === sub.id}
+                                className="px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {processingId === sub.id ? '...' : 'Delete'}
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>

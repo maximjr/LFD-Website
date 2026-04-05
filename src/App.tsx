@@ -18,6 +18,7 @@ const Seminars = lazy(() => import('./pages/Seminars'));
 const Contact = lazy(() => import('./pages/Contact'));
 const Login = lazy(() => import('./pages/Login'));
 const LiveSeminars = lazy(() => import('./pages/LiveSeminars'));
+const Activation = lazy(() => import('./pages/Activation'));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
 
 // Loading component
@@ -44,6 +45,14 @@ export default function App() {
                   element={
                     <ProtectedRoute>
                       <Seminars />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/activate" 
+                  element={
+                    <ProtectedRoute>
+                      <Activation />
                     </ProtectedRoute>
                   } 
                 />

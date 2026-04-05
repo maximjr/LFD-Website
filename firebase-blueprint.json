@@ -75,6 +75,23 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["streamTitle", "streamStatus"]
+    },
+    "ActivationCode": {
+      "title": "ActivationCode",
+      "description": "Hashed activation code for subscription verification.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "activationCode": { "type": "string", "description": "Bcrypt hashed activation code." },
+        "subscriptionId": { "type": "string" },
+        "subscriptionStatus": { "type": "string" },
+        "activationStatus": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expirationTime": { "type": "string", "format": "date-time" },
+        "attempts": { "type": "integer" }
+      },
+      "required": ["userId", "email", "activationCode", "subscriptionId", "activationStatus", "createdAt", "expirationTime"]
     }
   },
   "firestore": {
@@ -97,6 +114,10 @@
     "/streamConfig/{docId}": {
       "schema": "StreamConfig",
       "description": "Collection containing the singleton stream configuration."
+    },
+    "/activationCodes/{codeId}": {
+      "schema": "ActivationCode",
+      "description": "Collection of hashed activation codes."
     }
   }
 }

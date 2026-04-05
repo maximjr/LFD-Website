@@ -80,6 +80,17 @@ export default function Seminars() {
     checkUserAccess();
   }, [currentUser]);
 
+  useEffect(() => {
+    if (showSubModal || showConfirmationModal || showKeyModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showSubModal, showConfirmationModal, showKeyModal]);
+
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -116,26 +127,40 @@ export default function Seminars() {
 
       setIsSubmitting(true);
 
-      await addDoc(collection(db, "subscriptions"), {
-        userId: currentUser.uid,
-        name,
-        email,
-        phone,
-        location,
-        planType: selectedPlan,
-        paymentMethod: payment,
-        status: "pending",
-        createdAt: serverTimestamp()
+      const response = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.uid,
+          name,
+          email,
+          phone,
+          location,
+          planType: selectedPlan,
+          paymentMethod: payment,
+        }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to process subscription');
+      }
 
       setSubscriptionStatus("pending");
       setShowSubModal(false);
       setShowConfirmationModal(true);
       setIsSubmitting(false);
 
-    } catch (error) {
+      // After a short delay, redirect to activation page
+      setTimeout(() => {
+        navigate('/activate');
+      }, 3000);
+
+    } catch (error: any) {
       console.error("Submission Error:", error);
-      alert("Something went wrong. Please try again.");
+      alert(error.message || "Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
   };
@@ -592,123 +617,123 @@ export default function Seminars() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowSubModal(false)}
-              className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm"
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden"
+              className="relative bg-white w-[95%] sm:w-[90%] max-w-[420px] md:max-w-[500px] lg:max-w-[420px] max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl"
             >
-              <div className="p-8 sm:p-10">
-                <div className="flex items-center justify-between mb-8">
+              <div className="p-4 sm:p-5">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-2xl font-black text-slate-900">
+                    <h2 className="text-xl font-bold text-slate-900">
                       {selectedPlan === 'monthly' ? 'Monthly Plan ($50)' : 'Yearly Plan ($500)'}
                     </h2>
-                    <p className="text-slate-500 font-medium mt-1">
+                    <p className="text-sm text-slate-500 mt-1">
                       Please enter your details to subscribe
                     </p>
                   </div>
                   <button 
                     onClick={() => setShowSubModal(false)}
-                    className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-all"
+                    className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-all shrink-0"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                <form onSubmit={handleFormSubmit} className="space-y-6">
-                  <div className="space-y-2">
+                <form onSubmit={handleFormSubmit} className="space-y-3">
+                  <div className="space-y-1">
                     <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
                     <div className="relative">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input 
                         required
                         type="text" 
                         placeholder="Full Name"
                         value={formData.name}
                         onChange={(e) => setFormData({...formData, name: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                        className="w-full h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <label className="text-sm font-bold text-slate-700 ml-1">Phone Number</label>
                     <div className="relative">
-                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input 
                         required
                         type="tel" 
                         placeholder="Phone Number (+237...)"
                         value={formData.phone}
                         onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                        className="w-full h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
                     <div className="relative">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input 
                         required
                         type="email" 
                         placeholder="Email Address"
                         value={formData.email}
                         onChange={(e) => setFormData({...formData, email: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                        className="w-full h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <label className="text-sm font-bold text-slate-700 ml-1">Location</label>
                     <div className="relative">
-                      <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input 
                         required
                         type="text" 
                         placeholder="Your Location"
                         value={formData.location}
                         onChange={(e) => setFormData({...formData, location: e.target.value})}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                        className="w-full h-[44px] text-sm bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-2 pt-1">
                     <label className="text-sm font-bold text-slate-700 ml-1">Payment Method</label>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="flex gap-2.5">
                       <button
                         type="button"
                         onClick={() => setFormData({...formData, paymentMethod: 'MTN MoMo'})}
-                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
+                        className={`flex-1 p-2.5 rounded-lg border-2 transition-all flex flex-col items-center gap-1.5 ${
                           formData.paymentMethod === 'MTN MoMo' 
                           ? 'border-amber-400 bg-amber-50 text-amber-700' 
                           : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200'
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formData.paymentMethod === 'MTN MoMo' ? 'bg-amber-400 text-white' : 'bg-slate-200'}`}>
-                          <CreditCard className="w-5 h-5" />
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${formData.paymentMethod === 'MTN MoMo' ? 'bg-amber-400 text-white' : 'bg-slate-200'}`}>
+                          <CreditCard className="w-4 h-4" />
                         </div>
-                        <span className="font-bold text-sm">MTN MoMo</span>
+                        <span className="font-semibold text-[13px]">MTN MoMo</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setFormData({...formData, paymentMethod: 'Orange Money'})}
-                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
+                        className={`flex-1 p-2.5 rounded-lg border-2 transition-all flex flex-col items-center gap-1.5 ${
                           formData.paymentMethod === 'Orange Money' 
                           ? 'border-orange-500 bg-orange-50 text-orange-700' 
                           : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200'
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formData.paymentMethod === 'Orange Money' ? 'bg-orange-500 text-white' : 'bg-slate-200'}`}>
-                          <CreditCard className="w-5 h-5" />
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${formData.paymentMethod === 'Orange Money' ? 'bg-orange-500 text-white' : 'bg-slate-200'}`}>
+                          <CreditCard className="w-4 h-4" />
                         </div>
-                        <span className="font-bold text-sm">Orange Money</span>
+                        <span className="font-semibold text-[13px]">Orange Money</span>
                       </button>
                     </div>
                   </div>
@@ -716,11 +741,11 @@ export default function Seminars() {
                   <button 
                     disabled={isSubmitting}
                     type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-5 rounded-2xl transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 disabled:opacity-50"
+                    className="w-full h-[45px] mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[15px] rounded-lg transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <>
-                        <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                         <span>Processing...</span>
                       </>
                     ) : (
@@ -739,27 +764,27 @@ export default function Seminars() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/90 backdrop-blur-md"
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden"
+              className="relative bg-white w-[95%] sm:w-[90%] max-w-[420px] rounded-xl shadow-2xl overflow-hidden"
             >
-              <div className="p-8 sm:p-10 text-center">
-                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8">
-                  <ShieldCheck className="w-10 h-10" />
+              <div className="p-6 sm:p-8 text-center">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <ShieldCheck className="w-8 h-8" />
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 mb-4">Awaiting Activation</h2>
-                <p className="text-slate-500 font-medium mb-8 leading-relaxed">
+                <h2 className="text-xl font-bold text-slate-900 mb-3">Awaiting Activation</h2>
+                <p className="text-sm text-slate-500 font-medium mb-6 leading-relaxed">
                   Your request has been submitted successfully.<br /><br />
                   Please wait for activation.
                 </p>
 
                 <button 
                   onClick={() => setShowConfirmationModal(false)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3"
+                  className="w-full h-[45px] bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[15px] rounded-lg transition-all shadow-md flex items-center justify-center gap-2"
                 >
                   OK
                 </button>
@@ -774,31 +799,40 @@ export default function Seminars() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/90 backdrop-blur-md"
+              onClick={() => setShowKeyModal(false)}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden"
+              className="relative bg-white w-[95%] sm:w-[90%] max-w-[420px] rounded-xl shadow-2xl overflow-hidden"
             >
-              <div className="p-8 sm:p-10 text-center">
-                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8">
-                  <Key className="w-10 h-10" />
+              <div className="p-6 sm:p-8 text-center">
+                <div className="absolute top-4 right-4">
+                  <button 
+                    onClick={() => setShowKeyModal(false)}
+                    className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-all shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 mb-4">Enter Activation Key</h2>
-                <p className="text-slate-500 font-medium mb-8">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Key className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 mb-2">Enter Activation Key</h2>
+                <p className="text-sm text-slate-500 font-medium mb-6">
                   Please enter your key to access the LIVE seminar.
                 </p>
 
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {activationSuccess ? (
                     <motion.div 
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="bg-emerald-50 text-emerald-600 p-6 rounded-2xl font-bold"
+                      className="bg-emerald-50 text-emerald-600 p-4 rounded-lg font-bold text-sm"
                     >
-                      <CheckCircle2 className="w-10 h-10 mx-auto mb-4" />
+                      <CheckCircle2 className="w-6 h-6 mx-auto mb-2" />
                       Activation successful!<br />
                       Redirecting to LIVE Seminar...
                     </motion.div>
@@ -808,41 +842,33 @@ export default function Seminars() {
                         <input 
                           id="activationKey"
                           type="text" 
-                          placeholder="Enter your key"
+                          placeholder="e.g. OPT-A1B2C3D4"
                           value={subKey}
                           disabled={isActivating}
                           onChange={(e) => {
                             setSubKey(e.target.value);
                             setKeyError('');
                           }}
-                          className={`w-full bg-slate-50 border ${keyError ? 'border-rose-500' : 'border-slate-200'} rounded-2xl py-5 px-6 text-center text-xl font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all uppercase disabled:opacity-50`}
+                          className={`w-full h-[44px] text-sm bg-slate-50 border ${keyError ? 'border-rose-500' : 'border-slate-200'} rounded-lg px-4 text-center font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all uppercase disabled:opacity-50`}
                         />
                         {keyError && (
-                          <p className="text-rose-500 text-sm font-bold mt-2">{keyError}</p>
+                          <p className="text-rose-500 text-sm font-medium mt-2">{keyError}</p>
                         )}
                       </div>
 
                       <button 
                         onClick={handleKeyActivation}
-                        disabled={isActivating}
-                        className="w-full bg-slate-900 hover:bg-black text-white font-bold py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
+                        disabled={isActivating || !subKey.trim()}
+                        className="w-full h-[45px] bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[15px] rounded-lg transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
                       >
                         {isActivating ? (
                           <>
-                            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-                            <span>Validating...</span>
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            <span>Verifying...</span>
                           </>
                         ) : (
-                          <span>Validate</span>
+                          <span>Activate Now</span>
                         )}
-                      </button>
-                      
-                      <button 
-                        onClick={() => setShowKeyModal(false)}
-                        disabled={isActivating}
-                        className="text-slate-400 font-bold hover:text-slate-600 transition-colors disabled:opacity-50"
-                      >
-                        Cancel
                       </button>
                     </>
                   )}

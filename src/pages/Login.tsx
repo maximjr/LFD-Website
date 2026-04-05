@@ -23,7 +23,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && currentUser) {
-      navigate('/seminars');
+      navigate('/');
     }
   }, [currentUser, authLoading, navigate]);
 
@@ -68,7 +68,7 @@ export default function Login() {
         });
       }
       
-      navigate('/seminars');
+      navigate('/');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
     } finally {
@@ -84,7 +84,7 @@ export default function Login() {
     try {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email, password);
-        navigate('/seminars');
+        navigate('/');
       } else {
         if (password !== repeatPassword) {
           setError('Passwords do not match');
@@ -103,7 +103,7 @@ export default function Login() {
             createdAt: serverTimestamp()
           });
         }
-        navigate('/seminars');
+        navigate('/');
       }
     } catch (err: any) {
       if (isLogin) {

@@ -73,7 +73,9 @@ service cloud.firestore {
              data.email is string &&
              data.phone is string &&
              data.planType in ['monthly', 'yearly'] &&
-             data.status in ['pending', 'active', 'expired'];
+             data.status in ['pending', 'active', 'expired', 'deleted'] &&
+             (!('deleted' in data) || data.deleted is bool) &&
+             (!('deletedAt' in data) || data.deletedAt == null || data.deletedAt is timestamp);
     }
 
     function isValidActivationKey(data) {
@@ -83,7 +85,8 @@ service cloud.firestore {
              data.plan in ['monthly', 'yearly'] &&
              data.durationDays is int &&
              data.key is string &&
-             data.status in ['unused', 'used'];
+             data.status in ['unused', 'used'] &&
+             (!('deleted' in data) || data.deleted is bool);
     }
 
     match /users/{userId} {
@@ -96,6 +99,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidSubscription(request.resource.data);
       allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && isValidSubscription(request.resource.data));
+      allow delete: if isAdmin();
     }
 
     match /activationKeys/{keyId} {
@@ -116,6 +120,17 @@ service cloud.firestore {
     match /streamConfig/{docId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    match /adminLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /activationCodes/{codeId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // Only written by backend server
     }
   }
 }

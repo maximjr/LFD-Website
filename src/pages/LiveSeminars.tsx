@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, doc, onSnapshot, Timestamp } from 'firebase/firestore';
+import CustomVideoPlayer from '../components/CustomVideoPlayer';
 
 export default function LiveSeminars() {
   const { currentUser, loading, isAdmin } = useAuth();
@@ -37,6 +38,8 @@ export default function LiveSeminars() {
 
           for (const doc of querySnapshot.docs) {
             const subData = doc.data();
+            if (subData.deleted === true) continue; // Skip deleted subscriptions
+            
             const expiry = subData.expiryDate as Timestamp;
             if (expiry && now.toMillis() < expiry.toMillis()) {
               hasValidActive = true;
@@ -136,23 +139,29 @@ export default function LiveSeminars() {
       <main className="flex-grow py-8">
         <div className="container-custom max-w-5xl mx-auto space-y-8">
           {/* Video Player Container */}
-          <div 
-            className="aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl relative border border-slate-700"
-            onContextMenu={(e) => e.preventDefault()} // Disable right click
-          >
+          <div className="relative">
             {isLive && streamConfig.youtubeVideoId ? (
-              <iframe
-                width="100%"
-                height="100%"
-                src={`https://www.youtube.com/embed/${streamConfig.youtubeVideoId}?rel=0&modestbranding=1&controls=1&disablekb=1&fs=0&autoplay=1`}
-                title="Live Seminar"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen={false}
-                className="absolute inset-0 pointer-events-auto"
-              ></iframe>
+              <CustomVideoPlayer 
+                url={`https://www.youtube.com/watch?v=${streamConfig.youtubeVideoId}`}
+                title={streamConfig.streamTitle}
+                isLive={true}
+              />
+            ) : isLive && !streamConfig.youtubeVideoId ? (
+              <div className="aspect-video bg-slate-800/50 rounded-3xl flex flex-col items-center justify-center text-center p-6 border border-slate-700 shadow-2xl">
+                <div className="relative z-10 flex flex-col items-center">
+                  <div className="w-20 h-20 bg-slate-800/80 backdrop-blur-sm rounded-full flex items-center justify-center mb-6 border border-slate-700 shadow-xl">
+                    <AlertCircle className="w-10 h-10 text-amber-500" />
+                  </div>
+                  <h2 className="text-2xl font-bold mb-2 text-white">
+                    Video Feed Connecting...
+                  </h2>
+                  <p className="text-slate-400 max-w-md">
+                    The seminar is live, but the video feed is currently being connected by the administrator. Please hold on.
+                  </p>
+                </div>
+              </div>
             ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-800/50">
+              <div className="aspect-video bg-slate-800/50 rounded-3xl flex flex-col items-center justify-center text-center p-6 border border-slate-700 shadow-2xl">
                 <div className="relative z-10 flex flex-col items-center">
                   <div className="w-20 h-20 bg-slate-800/80 backdrop-blur-sm rounded-full flex items-center justify-center mb-6 border border-slate-700 shadow-xl">
                     <Video className="w-10 h-10 text-slate-400" />
@@ -173,7 +182,7 @@ export default function LiveSeminars() {
           </div>
 
           {/* Seminar Details */}
-          <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700">
+          <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700 shadow-xl">
             <h2 className="text-2xl font-bold mb-4 text-white">About this Seminar</h2>
             <p className="text-slate-400 leading-relaxed text-lg whitespace-pre-wrap">
               {streamConfig.streamDescription || 'No description provided.'}
@@ -184,3 +193,4 @@ export default function LiveSeminars() {
     </div>
   );
 }
+
