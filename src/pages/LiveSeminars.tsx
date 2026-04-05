@@ -2,19 +2,64 @@ import { motion } from 'motion/react';
 import { Video, Users, MessageSquare, ShieldCheck } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, orderBy, limit, Timestamp } from 'firebase/firestore';
 
 export default function LiveSeminars() {
+  const { currentUser, loading } = useAuth();
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const access = localStorage.getItem('seminar_access');
-    setHasAccess(access === 'true');
-  }, []);
+    async function checkUserAccess() {
+      if (!currentUser) {
+        setHasAccess(false);
+        return;
+      }
 
-  if (hasAccess === null) return null;
+      try {
+        const q = query(
+          collection(db, "subscriptions"),
+          where("userId", "==", currentUser.uid),
+          where("status", "==", "active"),
+          orderBy("createdAt", "desc"),
+          limit(1)
+        );
 
-  if (!hasAccess) {
-    return <Navigate to="/seminars" replace />;
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const subData = querySnapshot.docs[0].data();
+          const now = Timestamp.now();
+          const expiry = subData.expiryDate as Timestamp;
+
+          if (expiry && now.toMillis() < expiry.toMillis()) {
+            setHasAccess(true);
+          } else {
+            setHasAccess(false);
+          }
+        } else {
+          setHasAccess(false);
+        }
+      } catch (error) {
+        console.error("Error checking access:", error);
+        setHasAccess(false);
+      }
+    }
+
+    checkUserAccess();
+  }, [currentUser]);
+
+  if (loading || hasAccess === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!currentUser || !hasAccess) {
+    return <Navigate to="/" replace />;
   }
 
   return (
@@ -27,7 +72,7 @@ export default function LiveSeminars() {
               <Video className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">LIVE: Chronic Disease Management</h1>
+              <h1 className="text-xl font-bold">Live Training Session</h1>
               <p className="text-sm text-emerald-400 flex items-center gap-2">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -53,36 +98,24 @@ export default function LiveSeminars() {
       {/* Main Content */}
       <main className="flex-grow py-8">
         <div className="container-custom grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Video Player Placeholder */}
+          {/* Video Player */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl relative group border border-slate-700">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <Video className="w-20 h-20 text-slate-700 mx-auto mb-4" />
-                  <p className="text-slate-500 font-medium text-lg">Connecting to live stream...</p>
-                </div>
-              </div>
-              <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <button className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center backdrop-blur-md transition-all">
-                      <Video className="w-5 h-5" />
-                    </button>
-                    <div className="h-1 w-48 bg-white/20 rounded-full overflow-hidden">
-                      <div className="h-full w-1/3 bg-emerald-500"></div>
-                    </div>
-                  </div>
-                  <button className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-sm transition-all">
-                    HD 1080p
-                  </button>
-                </div>
-              </div>
+            <div className="aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl relative border border-slate-700">
+              <iframe 
+                width="100%" 
+                height="100%" 
+                src="https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID" 
+                title="Live Seminar Stream"
+                frameBorder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                allowFullScreen
+              ></iframe>
             </div>
 
             <div className="bg-slate-800 rounded-3xl p-8 border border-slate-700">
               <h2 className="text-2xl font-bold mb-4">About this Seminar</h2>
               <p className="text-slate-400 leading-relaxed text-lg">
-                In this session, our lead specialist Dr. Robert Wilson discusses advanced strategies for managing chronic conditions through nutrition, lifestyle changes, and modern medical interventions. This seminar is part of our monthly series dedicated to patient empowerment and holistic health.
+                Welcome to your exclusive seminar access. In this session, our lead specialist discusses advanced strategies for managing chronic conditions through nutrition, lifestyle changes, and modern medical interventions.
               </p>
             </div>
           </div>

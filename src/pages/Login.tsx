@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, AlertCircle, User, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useEffect } from 'react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
 export default function Login() {
+  const { currentUser, loading: authLoading } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [resetSent, setResetSent] = useState(false);
@@ -16,6 +20,20 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && currentUser) {
+      navigate('/');
+    }
+  }, [currentUser, authLoading, navigate]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +54,20 @@ export default function Login() {
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check if user document exists, if not create it
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (!userDoc.exists()) {
+        await setDoc(doc(db, 'users', user.uid), {
+          displayName: user.displayName || 'Google User',
+          email: user.email,
+          role: 'user',
+          createdAt: serverTimestamp()
+        });
+      }
+      
       navigate('/seminars');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
@@ -63,6 +94,14 @@ export default function Login() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         if (userCredential.user) {
           await updateProfile(userCredential.user, { displayName: name });
+          
+          // Create user document in Firestore
+          await setDoc(doc(db, 'users', userCredential.user.uid), {
+            displayName: name,
+            email: email,
+            role: 'user',
+            createdAt: serverTimestamp()
+          });
         }
         navigate('/seminars');
       }

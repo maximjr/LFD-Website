@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Calendar, Menu, X, LogOut } from 'lucide-react';
+import { Calendar, Menu, X, LogOut, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../firebase';
@@ -11,7 +11,13 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin: isUserAdmin } = useAuth();
+
+  interface NavLink {
+    name: string;
+    path: string;
+    icon?: React.ReactNode;
+  }
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -23,13 +29,17 @@ export default function Navbar() {
     setIsOpen(false);
   }, [location]);
 
-  const navLinks = [
+  const navLinks: NavLink[] = [
     { name: 'Home', path: '/' },
     { name: 'About Us', path: '/about' },
     { name: 'Products', path: '/products' },
     { name: 'Seminars', path: '/seminars' },
     { name: 'Contact', path: '/contact' },
   ];
+
+  if (isUserAdmin) {
+    navLinks.push({ name: 'Admin', path: '/admin', icon: <ShieldCheck className="w-4 h-4" /> });
+  }
 
   const handleLogout = async () => {
     try {
@@ -70,10 +80,11 @@ export default function Navbar() {
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`text-sm font-semibold transition-colors hover:text-emerald-600 ${
+                  className={`text-sm font-semibold transition-colors hover:text-emerald-600 flex items-center gap-1.5 ${
                     isActive(link.path) ? 'text-emerald-600' : 'text-slate-600'
                   }`}
                 >
+                  {link.icon}
                   {link.name}
                 </Link>
               ))}
@@ -130,12 +141,13 @@ export default function Navbar() {
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`block px-4 py-3 rounded-xl text-base font-semibold transition-colors ${
+                  className={`block px-4 py-3 rounded-xl text-base font-semibold transition-colors flex items-center gap-2 ${
                     isActive(link.path) 
                       ? 'bg-emerald-50 text-emerald-600' 
                       : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
+                  {link.icon && <span className="w-5 h-5">{link.icon}</span>}
                   {link.name}
                 </Link>
               ))}

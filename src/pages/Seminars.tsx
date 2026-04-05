@@ -1,19 +1,71 @@
-import { CheckCircle2, Heart, Apple, ShieldCheck, Brain, Star, ChevronDown, ChevronUp, X, CreditCard, Phone, Mail, User, Key } from 'lucide-react';
+import { CheckCircle2, Heart, Apple, ShieldCheck, Brain, Star, ChevronDown, ChevronUp, X, CreditCard, Phone, Mail, User, Key, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { auth, db } from '../firebase';
+import { collection, addDoc, query, where, getDocs, orderBy, limit, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Seminars() {
+  const { currentUser } = useAuth();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [showSubModal, setShowSubModal] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(localStorage.getItem("subscriptionStatus"));
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [subKey, setSubKey] = useState('');
   const [keyError, setKeyError] = useState('');
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    async function checkUserAccess() {
+      if (!currentUser) {
+        setSubscriptionStatus(null);
+        setCheckingAccess(false);
+        return;
+      }
+
+      try {
+        const q = query(
+          collection(db, "subscriptions"),
+          where("userId", "==", currentUser.uid),
+          orderBy("createdAt", "desc"),
+          limit(1)
+        );
+
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const subData = querySnapshot.docs[0].data();
+          const status = subData.status;
+
+          if (status === "active") {
+            const now = Timestamp.now();
+            const expiry = subData.expiryDate as Timestamp;
+
+            if (expiry && now.toMillis() < expiry.toMillis()) {
+              setSubscriptionStatus("active");
+            } else {
+              setSubscriptionStatus("expired");
+            }
+          } else {
+            setSubscriptionStatus(status);
+          }
+        } else {
+          setSubscriptionStatus(null);
+        }
+      } catch (error) {
+        console.error("Error checking access:", error);
+      } finally {
+        setCheckingAccess(false);
+      }
+    }
+
+    checkUserAccess();
+  }, [currentUser]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -23,18 +75,20 @@ export default function Seminars() {
     paymentMethod: 'MTN MoMo' as 'MTN MoMo' | 'Orange Money'
   });
 
-  const VALID_KEYS = ["OPTIMAL123", "HEALTH2024"];
-
   const handleSubscribeClick = (plan: 'monthly' | 'yearly') => {
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
     setSelectedPlan(plan);
     setShowSubModal(true);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      if (!selectedPlan) return;
+      if (!selectedPlan || !currentUser) return;
 
       const name = formData.name.trim();
       const phone = formData.phone.trim();
@@ -49,25 +103,22 @@ export default function Seminars() {
 
       setIsSubmitting(true);
 
-      const planText = selectedPlan === 'monthly' ? 'Monthly ($50)' : 'Yearly ($500)';
-      
-      const message = `New Subscription Request - Optimal Healthcare
+      await addDoc(collection(db, "subscriptions"), {
+        userId: currentUser.uid,
+        name,
+        email,
+        phone,
+        location,
+        planType: selectedPlan,
+        paymentMethod: payment,
+        status: "pending",
+        createdAt: serverTimestamp()
+      });
 
-Plan: ${planText}
-Name: ${name}
-Phone: ${phone}
-Email: ${email}
-Location: ${location}
-Payment Method: ${payment}`;
-
-      const whatsappURL = "https://wa.me/237686661578?text=" + encodeURIComponent(message);
-
-      // Save subscription state locally
-      localStorage.setItem("subscriptionStatus", "pending");
       setSubscriptionStatus("pending");
-
-      // Redirect to WhatsApp
-      window.location.href = whatsappURL;
+      setShowSubModal(false);
+      setShowConfirmationModal(true);
+      setIsSubmitting(false);
 
     } catch (error) {
       console.error("Submission Error:", error);
@@ -77,13 +128,17 @@ Payment Method: ${payment}`;
   };
 
   const handleKeyActivation = () => {
-    if (VALID_KEYS.includes(subKey.toUpperCase())) {
+    const key = subKey.trim().toUpperCase();
+    
+    if (key === "OPTIMAL26" || key === "HEALTH26") {
+      // In a real automated system, the key would be validated against a database
+      // and update the user's subscription status in Firestore.
+      // For now, we'll simulate the "automated" feel by granting access.
       alert("Access granted!");
-      localStorage.setItem('seminar_access', 'true');
+      setSubscriptionStatus('active');
       navigate('/live-seminars');
     } else {
-      alert("Invalid subscription key");
-      setKeyError("Invalid subscription key. Please check your message.");
+      setKeyError("Invalid activation key");
     }
   };
 
@@ -102,6 +157,14 @@ Payment Method: ${payment}`;
     }
   ];
 
+  if (checkingAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       {subscriptionStatus === "pending" ? (
@@ -117,16 +180,38 @@ Payment Method: ${payment}`;
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button 
+                onClick={() => setShowKeyModal(true)}
+                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2"
+              >
+                <Key className="w-5 h-5" /> Enter Activation Key
+              </button>
+              <button 
                 onClick={() => {
-                  localStorage.removeItem("subscriptionStatus");
-                  localStorage.removeItem("subscriptionPlan");
                   setSubscriptionStatus(null);
                 }}
-                className="bg-slate-900 hover:bg-black text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl"
+                className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 px-8 rounded-2xl transition-all"
               >
                 Cancel Request
               </button>
             </div>
+          </div>
+        </section>
+      ) : subscriptionStatus === "expired" ? (
+        <section className="flex-grow flex items-center justify-center py-24 bg-slate-50">
+          <div className="container-custom text-center max-w-2xl">
+            <div className="w-24 h-24 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-8">
+              <AlertCircle className="w-12 h-12" />
+            </div>
+            <h2 className="text-slate-900 mb-6">Subscription Expired</h2>
+            <p className="text-lg text-slate-600 mb-10 leading-relaxed">
+              Your subscription has expired. Please renew to continue accessing our premium seminars.
+            </p>
+            <button 
+              onClick={() => setSubscriptionStatus(null)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl"
+            >
+              View Plans
+            </button>
           </div>
         </section>
       ) : (
@@ -154,6 +239,14 @@ Payment Method: ${payment}`;
             <p className="text-lg sm:text-xl text-slate-200 max-w-2xl mx-auto leading-relaxed mb-10">
               Learn how to prevent and manage chronic diseases effectively with our expert-led health education programs.
             </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button 
+                onClick={() => setShowKeyModal(true)}
+                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2"
+              >
+                <Key className="w-5 h-5" /> Enter Activation Key
+              </button>
+            </div>
           </motion.div>
         </div>
       </section>
@@ -258,6 +351,129 @@ Payment Method: ${payment}`;
           </div>
         </div>
       </section>
+
+      {/* Why Attend */}
+      <section className="py-24 bg-[#064e3b] text-white">
+        <div className="container-custom">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <h2 className="text-white mb-6">Why Attend Our Seminars?</h2>
+              <p className="text-emerald-100 text-lg mb-12 leading-relaxed">
+                Our training programs are meticulously designed to provide you with the knowledge and tools necessary for optimal health and disease prevention.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-8">
+                {[
+                  { title: "Expert-Led Training", desc: "Learn directly from experienced healthcare professionals and specialists." },
+                  { title: "Practical Strategies", desc: "Gain actionable health strategies you can implement in your daily life immediately." },
+                  { title: "Personalized Guidance", desc: "Receive tailored advice and answers to your specific health questions." },
+                  { title: "Long-Term Improvement", desc: "Build sustainable habits for lasting health and disease prevention." }
+                ].map((feature, i) => (
+                  <div key={i}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                      <h3 className="font-bold text-lg">{feature.title}</h3>
+                    </div>
+                    <p className="text-emerald-100/80 text-sm leading-relaxed pl-9">{feature.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="relative">
+              <img 
+                src="https://images.unsplash.com/photo-1514565131-fce0801e5785?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" 
+                alt="Seminar environment" 
+                className="rounded-3xl shadow-2xl w-full object-cover aspect-[4/3]"
+              />
+              <div className="absolute -bottom-8 -left-8 bg-white text-slate-900 p-6 rounded-2xl shadow-xl flex items-center gap-5">
+                <div className="bg-purple-100 p-4 rounded-full text-purple-600">
+                  <Star className="fill-current w-8 h-8"/>
+                </div>
+                <div>
+                  <div className="font-black text-2xl">4.9/5</div>
+                  <div className="text-sm text-slate-500 font-medium">Average Rating</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Success Stories */}
+      <section className="py-24 bg-white">
+        <div className="container-custom">
+          <div className="text-center mb-16">
+            <h2 className="text-slate-900 mb-4">Participant Success Stories</h2>
+            <p className="text-slate-600 text-lg">Hear how our training programs have transformed lives.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              {
+                quote: "This seminar completely changed my approach to managing my condition. The practical tips were invaluable.",
+                name: "David Wilson",
+                role: "Managing Diabetes Effectively"
+              },
+              {
+                quote: "I finally understand how to build a sustainable, healthy diet. The instructor was incredibly knowledgeable.",
+                name: "Maria Garcia",
+                role: "Nutrition for Optimal Health"
+              },
+              {
+                quote: "The mindfulness techniques I learned here have significantly reduced my daily anxiety. Highly recommended!",
+                name: "James Thompson",
+                role: "Stress Management"
+              }
+            ].map((story, i) => (
+              <div key={i} className="bg-slate-50 p-8 rounded-3xl border border-slate-100 flex flex-col">
+                <div className="flex gap-1 text-amber-400 mb-6">
+                  {[...Array(5)].map((_, j) => <Star key={j} className="w-5 h-5 fill-current" />)}
+                </div>
+                <p className="text-slate-600 italic mb-8 flex-grow leading-relaxed">"{story.quote}"</p>
+                <div>
+                  <h4 className="font-bold text-slate-900">{story.name}</h4>
+                  <p className="text-sm text-emerald-600 font-medium mt-1">{story.role}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-24 bg-slate-50">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-slate-900 mb-4">Frequently Asked Questions</h2>
+            <p className="text-slate-600 text-lg">Everything you need to know about our seminars.</p>
+          </div>
+          <div className="space-y-4">
+            {faqs.map((faq, i) => (
+              <div 
+                key={i} 
+                className="bg-white border border-slate-200 rounded-2xl overflow-hidden transition-all"
+              >
+                <button 
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full px-6 py-5 flex items-center justify-between text-left font-bold text-slate-900 focus:outline-none min-h-[44px]"
+                >
+                  {faq.q}
+                  {openFaq === i ? (
+                    <ChevronUp className="w-5 h-5 text-emerald-500 shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
+                  )}
+                </button>
+                {openFaq === i && (
+                  <div className="px-6 pb-5 text-slate-600 leading-relaxed">
+                    {faq.a}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+        </div>
+      )}
 
       {/* Subscription Modals */}
       <AnimatePresence>
@@ -397,7 +613,7 @@ Payment Method: ${payment}`;
                     {isSubmitting ? (
                       <>
                         <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span>Redirecting to WhatsApp...</span>
+                        <span>Processing...</span>
                       </>
                     ) : (
                       <>Submit Subscription</>
@@ -462,16 +678,17 @@ Payment Method: ${payment}`;
                 <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8">
                   <Key className="w-10 h-10" />
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 mb-4">Enter Your Subscription Key</h2>
+                <h2 className="text-2xl font-black text-slate-900 mb-4">Enter Activation Key</h2>
                 <p className="text-slate-500 font-medium mb-8">
-                  Please enter the activation key sent to your phone or email after payment.
+                  Please enter your key to access the LIVE seminar.
                 </p>
 
                 <div className="space-y-6">
                   <div className="relative">
                     <input 
+                      id="activationKey"
                       type="text" 
-                      placeholder="XXXX-XXXX-XXXX"
+                      placeholder="Enter your key"
                       value={subKey}
                       onChange={(e) => {
                         setSubKey(e.target.value);
@@ -488,7 +705,7 @@ Payment Method: ${payment}`;
                     onClick={handleKeyActivation}
                     className="w-full bg-slate-900 hover:bg-black text-white font-bold py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3"
                   >
-                    Activate Access
+                    Validate
                   </button>
                   
                   <button 
@@ -503,129 +720,6 @@ Payment Method: ${payment}`;
           </div>
         )}
       </AnimatePresence>
-
-      {/* Why Attend */}
-      <section className="py-24 bg-[#064e3b] text-white">
-        <div className="container-custom">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <div>
-              <h2 className="text-white mb-6">Why Attend Our Seminars?</h2>
-              <p className="text-emerald-100 text-lg mb-12 leading-relaxed">
-                Our training programs are meticulously designed to provide you with the knowledge and tools necessary for optimal health and disease prevention.
-              </p>
-              <div className="grid sm:grid-cols-2 gap-8">
-                {[
-                  { title: "Expert-Led Training", desc: "Learn directly from experienced healthcare professionals and specialists." },
-                  { title: "Practical Strategies", desc: "Gain actionable health strategies you can implement in your daily life immediately." },
-                  { title: "Personalized Guidance", desc: "Receive tailored advice and answers to your specific health questions." },
-                  { title: "Long-Term Improvement", desc: "Build sustainable habits for lasting health and disease prevention." }
-                ].map((feature, i) => (
-                  <div key={i}>
-                    <div className="flex items-center gap-3 mb-3">
-                      <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
-                      <h3 className="font-bold text-lg">{feature.title}</h3>
-                    </div>
-                    <p className="text-emerald-100/80 text-sm leading-relaxed pl-9">{feature.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="relative">
-              <img 
-                src="https://images.unsplash.com/photo-1514565131-fce0801e5785?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" 
-                alt="Seminar environment" 
-                className="rounded-3xl shadow-2xl w-full object-cover aspect-[4/3]"
-              />
-              <div className="absolute -bottom-8 -left-8 bg-white text-slate-900 p-6 rounded-2xl shadow-xl flex items-center gap-5">
-                <div className="bg-purple-100 p-4 rounded-full text-purple-600">
-                  <Star className="fill-current w-8 h-8"/>
-                </div>
-                <div>
-                  <div className="font-black text-2xl">4.9/5</div>
-                  <div className="text-sm text-slate-500 font-medium">Average Rating</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Success Stories */}
-      <section className="py-24 bg-white">
-        <div className="container-custom">
-          <div className="text-center mb-16">
-            <h2 className="text-slate-900 mb-4">Participant Success Stories</h2>
-            <p className="text-slate-600 text-lg">Hear how our training programs have transformed lives.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                quote: "This seminar completely changed my approach to managing my condition. The practical tips were invaluable.",
-                name: "David Wilson",
-                role: "Managing Diabetes Effectively"
-              },
-              {
-                quote: "I finally understand how to build a sustainable, healthy diet. The instructor was incredibly knowledgeable.",
-                name: "Maria Garcia",
-                role: "Nutrition for Optimal Health"
-              },
-              {
-                quote: "The mindfulness techniques I learned here have significantly reduced my daily anxiety. Highly recommended!",
-                name: "James Thompson",
-                role: "Stress Management"
-              }
-            ].map((story, i) => (
-              <div key={i} className="bg-slate-50 p-8 rounded-3xl border border-slate-100 flex flex-col">
-                <div className="flex gap-1 text-amber-400 mb-6">
-                  {[...Array(5)].map((_, j) => <Star key={j} className="w-5 h-5 fill-current" />)}
-                </div>
-                <p className="text-slate-600 italic mb-8 flex-grow leading-relaxed">"{story.quote}"</p>
-                <div>
-                  <h4 className="font-bold text-slate-900">{story.name}</h4>
-                  <p className="text-sm text-emerald-600 font-medium mt-1">{story.role}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="py-24 bg-slate-50">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-slate-900 mb-4">Frequently Asked Questions</h2>
-            <p className="text-slate-600 text-lg">Everything you need to know about our seminars.</p>
-          </div>
-          <div className="space-y-4">
-            {faqs.map((faq, i) => (
-              <div 
-                key={i} 
-                className="bg-white border border-slate-200 rounded-2xl overflow-hidden transition-all"
-              >
-                <button 
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full px-6 py-5 flex items-center justify-between text-left font-bold text-slate-900 focus:outline-none min-h-[44px]"
-                >
-                  {faq.q}
-                  {openFaq === i ? (
-                    <ChevronUp className="w-5 h-5 text-emerald-500 shrink-0" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
-                  )}
-                </button>
-                {openFaq === i && (
-                  <div className="px-6 pb-5 text-slate-600 leading-relaxed">
-                    {faq.a}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-        </div>
-      )}
     </div>
   );
 }

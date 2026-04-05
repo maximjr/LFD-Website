@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "Subscription": {
+      "title": "Subscription",
+      "description": "A subscription request for Optimal Healthcare services.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the subscriber." },
+        "email": { "type": "string", "format": "email", "description": "Email address of the subscriber." },
+        "phone": { "type": "string", "description": "Phone number of the subscriber." },
+        "planType": { "type": "string", "enum": ["monthly", "yearly"], "description": "Type of subscription plan." },
+        "paymentMethod": { "type": "string", "description": "Method used for payment." },
+        "status": { "type": "string", "enum": ["pending", "active", "expired"], "description": "Current status of the subscription." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the subscription request was created." },
+        "startDate": { "type": "string", "format": "date-time", "description": "When the subscription was activated." },
+        "expiryDate": { "type": "string", "format": "date-time", "description": "When the subscription expires." }
+      },
+      "required": ["name", "email", "phone", "planType", "status", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile with role information.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "User role for access control." }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/subscriptions/{subscriptionId}": {
+      "schema": "Subscription",
+      "description": "Collection of subscription requests."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user profiles and roles."
+    }
+  }
+}

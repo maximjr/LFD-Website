@@ -4,10 +4,10 @@ import { motion } from 'motion/react';
 
 export default function Home() {
   const featuredProducts = [
-    { name: "Vital Food", desc: "A nutrient-dense superfood blend designed to boost your immune system.", img: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" },
-    { name: "Vital Pufa", desc: "A healthy, low-glycemic alternative to traditional fufu.", img: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" },
-    { name: "Vital Buccal Care", desc: "Natural oral care solution formulated to promote healthy gums.", img: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" },
-    { name: "Exotic Natural Drink", desc: "Refreshing and revitalizing herbal beverage packed with antioxidants.", img: "https://images.unsplash.com/photo-1544145945-f90425340c7e?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" }
+    { name: "Vital Food", desc: "A nutrient-dense superfood blend designed to boost your immune system.", img: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=400&q=80" },
+    { name: "Vital Pufa", desc: "A healthy, low-glycemic alternative to traditional fufu.", img: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80" },
+    { name: "Vital Buccal Care", desc: "Natural oral care solution formulated to promote healthy gums.", img: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=400&q=80" },
+    { name: "Exotic Natural Drink", desc: "Refreshing and revitalizing herbal beverage packed with antioxidants.", img: "https://images.unsplash.com/photo-1544145945-f90425340c7e?auto=format&fit=crop&w=400&q=80" }
   ];
 
   const stats = [

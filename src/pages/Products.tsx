@@ -8,12 +8,12 @@ export default function Products() {
   const categories = ['All', 'Supplements', 'Health Drinks', 'Oral Care', 'Nutrition'];
 
   const products = [
-    { id: 1, name: "Vital Food", category: "Nutrition", price: 45.00, rating: 4.8, img: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80", desc: "A nutrient-dense superfood blend designed to boost your immune system." },
-    { id: 2, name: "Vital Pufa", category: "Nutrition", price: 38.50, rating: 4.9, img: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80", desc: "A healthy, low-glycemic alternative to traditional fufu." },
-    { id: 3, name: "Vital Buccal Care", category: "Oral Care", price: 22.00, rating: 4.7, img: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80", desc: "Natural oral care solution formulated to promote healthy gums." },
-    { id: 4, name: "Exotic Natural Drink", category: "Health Drinks", price: 15.99, rating: 4.6, img: "https://images.unsplash.com/photo-1544145945-f90425340c7e?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80", desc: "Refreshing and revitalizing herbal beverage packed with antioxidants." },
-    { id: 5, name: "Immune Booster", category: "Supplements", price: 55.00, rating: 4.9, img: "https://images.unsplash.com/photo-1584017911766-d451b3d0e843?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80", desc: "High-potency vitamin and mineral complex for peak immunity." },
-    { id: 6, name: "Green Detox", category: "Health Drinks", price: 29.99, rating: 4.5, img: "https://images.unsplash.com/photo-1610970881699-44a5587cabec?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80", desc: "Cleanse your system with our organic green juice blend." }
+    { id: 1, name: "Vital Food", category: "Nutrition", price: 45.00, rating: 4.8, img: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=500&q=80", desc: "A nutrient-dense superfood blend designed to boost your immune system." },
+    { id: 2, name: "Vital Pufa", category: "Nutrition", price: 38.50, rating: 4.9, img: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=500&q=80", desc: "A healthy, low-glycemic alternative to traditional fufu." },
+    { id: 3, name: "Vital Buccal Care", category: "Oral Care", price: 22.00, rating: 4.7, img: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=500&q=80", desc: "Natural oral care solution formulated to promote healthy gums." },
+    { id: 4, name: "Exotic Natural Drink", category: "Health Drinks", price: 15.99, rating: 4.6, img: "https://images.unsplash.com/photo-1544145945-f90425340c7e?auto=format&fit=crop&w=500&q=80", desc: "Refreshing and revitalizing herbal beverage packed with antioxidants." },
+    { id: 5, name: "Immune Booster", category: "Supplements", price: 55.00, rating: 4.9, img: "https://images.unsplash.com/photo-1584017911766-d451b3d0e843?auto=format&fit=crop&w=500&q=80", desc: "High-potency vitamin and mineral complex for peak immunity." },
+    { id: 6, name: "Green Detox", category: "Health Drinks", price: 29.99, rating: 4.5, img: "https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=500&q=80", desc: "Cleanse your system with our organic green juice blend." }
   ];
 
   const filteredProducts = activeCategory === 'All' 

@@ -1,16 +1,21 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyD8hSO0GO9EnRq5DA_uCI9YTd7aVEG1kDU",
-  authDomain: "lfd-website-9295e.firebaseapp.com",
-  projectId: "lfd-website-9295e",
-  storageBucket: "lfd-website-9295e.firebasestorage.app",
-  messagingSenderId: "458968745132",
-  appId: "1:458968745132:web:4a472e49acc89ba9cfcb09"
-};
+import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
+import firebaseConfig from "../firebase-applet-config.json";
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || "(default)");
+
+// Connection Test
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, "test", "connection"));
+  } catch (error) {
+    if(error instanceof Error && error.message.includes("the client is offline")) {
+      console.error("Please check your Firebase configuration. The client is offline.");
+    }
+  }
+}
+testConnection();
