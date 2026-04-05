@@ -5,6 +5,7 @@
       "description": "A subscription request for Optimal Healthcare services.",
       "type": "object",
       "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who owns the subscription." },
         "name": { "type": "string", "description": "Full name of the subscriber." },
         "email": { "type": "string", "format": "email", "description": "Email address of the subscriber." },
         "phone": { "type": "string", "description": "Phone number of the subscriber." },
@@ -27,6 +28,53 @@
         "role": { "type": "string", "enum": ["admin", "user"], "description": "User role for access control." }
       },
       "required": ["email", "role"]
+    },
+    "ActivationKey": {
+      "title": "ActivationKey",
+      "description": "Unique activation key for a specific user and plan.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who owns the key." },
+        "email": { "type": "string", "format": "email", "description": "Email address of the user." },
+        "plan": { "type": "string", "enum": ["monthly", "yearly"], "description": "Subscription plan associated with the key." },
+        "durationDays": { "type": "integer", "description": "Duration of the subscription in days." },
+        "key": { "type": "string", "description": "The unique activation key." },
+        "status": { "type": "string", "enum": ["unused", "used"], "description": "Current status of the key." },
+        "emailSent": { "type": "boolean", "description": "Whether the activation email has been sent." },
+        "emailSentAt": { "type": "string", "format": "date-time", "description": "When the activation email was sent." },
+        "emailAttempts": { "type": "integer", "description": "Number of email delivery attempts." },
+        "emailStatus": { "type": "string", "enum": ["pending", "sent", "retrying", "failed"], "description": "Current status of email delivery." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the key was generated." },
+        "expiresAt": { "type": "string", "format": "date-time", "description": "When the subscription expires after activation." }
+      },
+      "required": ["userId", "email", "plan", "durationDays", "key", "status", "createdAt"]
+    },
+    "MaintenanceLog": {
+      "title": "MaintenanceLog",
+      "description": "Log of automated maintenance operations.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time", "description": "When the maintenance ran." },
+        "actionsPerformed": { "type": "array", "items": { "type": "string" }, "description": "List of actions performed." },
+        "errorsFound": { "type": "array", "items": { "type": "string" }, "description": "List of errors encountered." },
+        "fixesApplied": { "type": "array", "items": { "type": "string" }, "description": "List of fixes applied." }
+      },
+      "required": ["date", "actionsPerformed", "errorsFound", "fixesApplied"]
+    },
+    "StreamConfig": {
+      "title": "StreamConfig",
+      "description": "Live stream configuration and status for YouTube Live.",
+      "type": "object",
+      "properties": {
+        "streamTitle": { "type": "string" },
+        "streamDescription": { "type": "string" },
+        "youtubeVideoId": { "type": "string" },
+        "streamStatus": { "type": "string", "enum": ["offline", "scheduled", "live", "ended"] },
+        "isSeminarActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["streamTitle", "streamStatus"]
     }
   },
   "firestore": {
@@ -37,6 +85,18 @@
     "/users/{userId}": {
       "schema": "User",
       "description": "Collection of user profiles and roles."
+    },
+    "/activationKeys/{keyId}": {
+      "schema": "ActivationKey",
+      "description": "Collection of user-specific activation keys."
+    },
+    "/maintenanceLogs/{logId}": {
+      "schema": "MaintenanceLog",
+      "description": "Collection of automated maintenance logs."
+    },
+    "/streamConfig/{docId}": {
+      "schema": "StreamConfig",
+      "description": "Collection containing the singleton stream configuration."
     }
   }
 }

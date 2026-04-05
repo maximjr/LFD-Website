@@ -23,7 +23,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && currentUser) {
-      navigate('/');
+      navigate('/seminars');
     }
   }, [currentUser, authLoading, navigate]);
 

@@ -1,13 +1,13 @@
-import { CheckCircle2, Heart, Apple, ShieldCheck, Brain, Star, ChevronDown, ChevronUp, X, CreditCard, Phone, Mail, User, Key, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Heart, Apple, ShieldCheck, Brain, Star, ChevronDown, ChevronUp, X, CreditCard, Phone, Mail, User, Key, AlertCircle, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
-import { collection, addDoc, query, where, getDocs, orderBy, limit, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, limit, Timestamp, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Seminars() {
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [showSubModal, setShowSubModal] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
@@ -15,6 +15,8 @@ export default function Seminars() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isActivating, setIsActivating] = useState(false);
+  const [activationSuccess, setActivationSuccess] = useState(false);
   const [subKey, setSubKey] = useState('');
   const [keyError, setKeyError] = useState('');
   const [checkingAccess, setCheckingAccess] = useState(true);
@@ -31,15 +33,26 @@ export default function Seminars() {
       try {
         const q = query(
           collection(db, "subscriptions"),
-          where("userId", "==", currentUser.uid),
-          orderBy("createdAt", "desc"),
-          limit(1)
+          where("userId", "==", currentUser.uid)
         );
 
         const querySnapshot = await getDocs(q);
         
         if (!querySnapshot.empty) {
-          const subData = querySnapshot.docs[0].data();
+          const subs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          // Sort by createdAt descending
+          subs.sort((a: any, b: any) => {
+            const timeA = a.createdAt?.toMillis() || 0;
+            const timeB = b.createdAt?.toMillis() || 0;
+            return timeB - timeA;
+          });
+
+          // Find active subscription
+          const activeSub = subs.find((sub: any) => sub.status === "active");
+          const pendingSub = subs.find((sub: any) => sub.status === "pending");
+          
+          const subData: any = activeSub || pendingSub || subs[0];
           const status = subData.status;
 
           if (status === "active") {
@@ -127,18 +140,97 @@ export default function Seminars() {
     }
   };
 
-  const handleKeyActivation = () => {
+  const handleKeyActivation = async () => {
     const key = subKey.trim().toUpperCase();
+    setKeyError("");
     
-    if (key === "OPTIMAL26" || key === "HEALTH26") {
-      // In a real automated system, the key would be validated against a database
-      // and update the user's subscription status in Firestore.
-      // For now, we'll simulate the "automated" feel by granting access.
-      alert("Access granted!");
+    if (!key) {
+      setKeyError("Please enter a key");
+      return;
+    }
+
+    if (!currentUser) {
+      setKeyError("Please login first");
+      return;
+    }
+
+    setIsActivating(true);
+    try {
+      // Query for the activation key
+      const q = query(
+        collection(db, "activationKeys"),
+        where("key", "==", key),
+        where("userId", "==", currentUser.uid),
+        where("status", "==", "unused")
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        setKeyError("Invalid or already used key for this account.");
+        setIsActivating(false);
+        return;
+      }
+
+      const keyDoc = snapshot.docs[0];
+      const keyData = keyDoc.data();
+      
+      const startDate = new Date();
+      const expiryDate = new Date();
+      expiryDate.setDate(startDate.getDate() + keyData.durationDays);
+
+      // 1. Update key as used
+      await updateDoc(doc(db, "activationKeys", keyDoc.id), {
+        status: "used",
+        expiresAt: Timestamp.fromDate(expiryDate)
+      });
+
+      // 2. Update or Create subscription
+      // Check if there's an existing pending subscription to update
+      const subQ = query(
+        collection(db, "subscriptions"),
+        where("userId", "==", currentUser.uid),
+        where("status", "==", "pending"),
+        limit(1)
+      );
+      const subSnapshot = await getDocs(subQ);
+
+      if (!subSnapshot.empty) {
+        // Update existing pending subscription
+        await updateDoc(doc(db, "subscriptions", subSnapshot.docs[0].id), {
+          status: "active",
+          planType: keyData.plan,
+          startDate: serverTimestamp(),
+          expiryDate: Timestamp.fromDate(expiryDate)
+        });
+      } else {
+        // Create new active subscription
+        await addDoc(collection(db, "subscriptions"), {
+          userId: currentUser.uid,
+          name: currentUser.displayName || "User",
+          email: currentUser.email || "",
+          phone: "N/A", // From key activation, we might not have phone
+          planType: keyData.plan,
+          status: "active",
+          startDate: serverTimestamp(),
+          expiryDate: Timestamp.fromDate(expiryDate),
+          createdAt: serverTimestamp()
+        });
+      }
+
+      setActivationSuccess(true);
       setSubscriptionStatus('active');
-      navigate('/live-seminars');
-    } else {
-      setKeyError("Invalid activation key");
+      
+      setTimeout(() => {
+        setShowKeyModal(false);
+        navigate('/live-seminars');
+      }, 2000);
+
+    } catch (error) {
+      console.error("Activation Error:", error);
+      setKeyError("Activation failed. Please try again.");
+    } finally {
+      setIsActivating(false);
     }
   };
 
@@ -180,10 +272,18 @@ export default function Seminars() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button 
-                onClick={() => setShowKeyModal(true)}
+                onClick={() => isAdmin ? navigate('/live-seminars') : setShowKeyModal(true)}
                 className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2"
               >
-                <Key className="w-5 h-5" /> Enter Activation Key
+                {isAdmin ? (
+                  <>
+                    <Video className="w-5 h-5" /> Access Live Seminar
+                  </>
+                ) : (
+                  <>
+                    <Key className="w-5 h-5" /> Enter Activation Key
+                  </>
+                )}
               </button>
               <button 
                 onClick={() => {
@@ -241,10 +341,18 @@ export default function Seminars() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button 
-                onClick={() => setShowKeyModal(true)}
+                onClick={() => isAdmin ? navigate('/live-seminars') : setShowKeyModal(true)}
                 className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2"
               >
-                <Key className="w-5 h-5" /> Enter Activation Key
+                {isAdmin ? (
+                  <>
+                    <Video className="w-5 h-5" /> Access Live Seminar
+                  </>
+                ) : (
+                  <>
+                    <Key className="w-5 h-5" /> Enter Activation Key
+                  </>
+                )}
               </button>
             </div>
           </motion.div>
@@ -684,36 +792,60 @@ export default function Seminars() {
                 </p>
 
                 <div className="space-y-6">
-                  <div className="relative">
-                    <input 
-                      id="activationKey"
-                      type="text" 
-                      placeholder="Enter your key"
-                      value={subKey}
-                      onChange={(e) => {
-                        setSubKey(e.target.value);
-                        setKeyError('');
-                      }}
-                      className={`w-full bg-slate-50 border ${keyError ? 'border-rose-500' : 'border-slate-200'} rounded-2xl py-5 px-6 text-center text-xl font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all uppercase`}
-                    />
-                    {keyError && (
-                      <p className="text-rose-500 text-sm font-bold mt-2">{keyError}</p>
-                    )}
-                  </div>
+                  {activationSuccess ? (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="bg-emerald-50 text-emerald-600 p-6 rounded-2xl font-bold"
+                    >
+                      <CheckCircle2 className="w-10 h-10 mx-auto mb-4" />
+                      Activation successful!<br />
+                      Redirecting to LIVE Seminar...
+                    </motion.div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <input 
+                          id="activationKey"
+                          type="text" 
+                          placeholder="Enter your key"
+                          value={subKey}
+                          disabled={isActivating}
+                          onChange={(e) => {
+                            setSubKey(e.target.value);
+                            setKeyError('');
+                          }}
+                          className={`w-full bg-slate-50 border ${keyError ? 'border-rose-500' : 'border-slate-200'} rounded-2xl py-5 px-6 text-center text-xl font-black tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all uppercase disabled:opacity-50`}
+                        />
+                        {keyError && (
+                          <p className="text-rose-500 text-sm font-bold mt-2">{keyError}</p>
+                        )}
+                      </div>
 
-                  <button 
-                    onClick={handleKeyActivation}
-                    className="w-full bg-slate-900 hover:bg-black text-white font-bold py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3"
-                  >
-                    Validate
-                  </button>
-                  
-                  <button 
-                    onClick={() => setShowKeyModal(false)}
-                    className="text-slate-400 font-bold hover:text-slate-600 transition-colors"
-                  >
-                    Cancel
-                  </button>
+                      <button 
+                        onClick={handleKeyActivation}
+                        disabled={isActivating}
+                        className="w-full bg-slate-900 hover:bg-black text-white font-bold py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
+                      >
+                        {isActivating ? (
+                          <>
+                            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            <span>Validating...</span>
+                          </>
+                        ) : (
+                          <span>Validate</span>
+                        )}
+                      </button>
+                      
+                      <button 
+                        onClick={() => setShowKeyModal(false)}
+                        disabled={isActivating}
+                        className="text-slate-400 font-bold hover:text-slate-600 transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </motion.div>
