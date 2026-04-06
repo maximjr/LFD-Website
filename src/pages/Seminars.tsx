@@ -2,8 +2,10 @@ import { CheckCircle2, Heart, Apple, ShieldCheck, Brain, Star, ChevronDown, Chev
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
+import { auth, db, functions } from '../firebase';
 import { collection, addDoc, query, where, getDocs, orderBy, limit, Timestamp, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
+import { httpsCallable } from "firebase/functions";
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Seminars() {
@@ -71,13 +73,13 @@ export default function Seminars() {
           setSubscriptionStatus(null);
         }
       } catch (error) {
-        console.error("Error checking access:", error);
+        handleFirestoreError(error, OperationType.GET, 'subscriptions');
       } finally {
         setCheckingAccess(false);
       }
     }
 
-    checkUserAccess();
+    checkUserAccess().catch((e) => console.error("checkUserAccess failed:", e));
   }, [currentUser]);
 
   useEffect(() => {
@@ -127,31 +129,62 @@ export default function Seminars() {
 
       setIsSubmitting(true);
 
-      const response = await fetch('/api/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: currentUser.uid,
-          name,
-          email,
-          phone,
-          location,
-          planType: selectedPlan,
-          paymentMethod: payment,
-        }),
-      });
+      const token = await currentUser.getIdToken();
+
+      let response;
+      try {
+        response = await fetch('/api/subscriptions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            userId: currentUser.uid,
+            name,
+            email,
+            phone,
+            location,
+            planType: selectedPlan,
+            paymentMethod: payment,
+          }),
+        });
+      } catch (networkError) {
+        console.error("Network error:", networkError);
+        throw new Error("Network error. Please check your connection and try again.");
+      }
+
+      if (response) {
+        console.log("Response status:", response.status);
+      }
+
+      if (!response || response.status === 204) {
+        console.warn("Empty response received");
+        throw new Error("Received an empty response from the server.");
+      }
+
+      let data = null;
+      const contentType = response.headers.get("content-type");
+      
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error("JSON parsing error:", jsonError);
+          throw new Error("The server returned an invalid response format.");
+        }
+      } else {
+        console.warn("Response is not JSON");
+        throw new Error("The server returned a non-JSON response.");
+      }
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to process subscription');
+        throw new Error(data?.message || data?.error?.details || 'Failed to process subscription');
       }
 
       setSubscriptionStatus("pending");
       setShowSubModal(false);
       setShowConfirmationModal(true);
-      setIsSubmitting(false);
 
       // After a short delay, redirect to activation page
       setTimeout(() => {
@@ -160,7 +193,9 @@ export default function Seminars() {
 
     } catch (error: any) {
       console.error("Submission Error:", error);
+      // Use a more user-friendly way to show errors if possible, but keeping alert for now as per base code pattern unless I find a better way
       alert(error.message || "Something went wrong. Please try again.");
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -181,67 +216,8 @@ export default function Seminars() {
 
     setIsActivating(true);
     try {
-      // Query for the activation key
-      const q = query(
-        collection(db, "activationKeys"),
-        where("key", "==", key),
-        where("userId", "==", currentUser.uid),
-        where("status", "==", "unused")
-      );
-
-      const snapshot = await getDocs(q);
-
-      if (snapshot.empty) {
-        setKeyError("Invalid or already used key for this account.");
-        setIsActivating(false);
-        return;
-      }
-
-      const keyDoc = snapshot.docs[0];
-      const keyData = keyDoc.data();
-      
-      const startDate = new Date();
-      const expiryDate = new Date();
-      expiryDate.setDate(startDate.getDate() + keyData.durationDays);
-
-      // 1. Update key as used
-      await updateDoc(doc(db, "activationKeys", keyDoc.id), {
-        status: "used",
-        expiresAt: Timestamp.fromDate(expiryDate)
-      });
-
-      // 2. Update or Create subscription
-      // Check if there's an existing pending subscription to update
-      const subQ = query(
-        collection(db, "subscriptions"),
-        where("userId", "==", currentUser.uid),
-        where("status", "==", "pending"),
-        limit(1)
-      );
-      const subSnapshot = await getDocs(subQ);
-
-      if (!subSnapshot.empty) {
-        // Update existing pending subscription
-        await updateDoc(doc(db, "subscriptions", subSnapshot.docs[0].id), {
-          status: "active",
-          planType: keyData.plan,
-          startDate: serverTimestamp(),
-          expiryDate: Timestamp.fromDate(expiryDate)
-        });
-      } else {
-        // Create new active subscription
-        await addDoc(collection(db, "subscriptions"), {
-          userId: currentUser.uid,
-          name: currentUser.displayName || "User",
-          email: currentUser.email || "",
-          phone: "N/A", // From key activation, we might not have phone
-          planType: keyData.plan,
-          status: "active",
-          startDate: serverTimestamp(),
-          expiryDate: Timestamp.fromDate(expiryDate),
-          createdAt: serverTimestamp()
-        });
-      }
+      const activateSubscription = httpsCallable(functions, 'activateSubscription');
+      await activateSubscription({ key });
 
       setActivationSuccess(true);
       setSubscriptionStatus('active');
@@ -251,9 +227,9 @@ export default function Seminars() {
         navigate('/live-seminars');
       }, 2000);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Activation Error:", error);
-      setKeyError("Activation failed. Please try again.");
+      setKeyError(error.message || "Activation failed. Please try again.");
     } finally {
       setIsActivating(false);
     }
@@ -643,7 +619,7 @@ export default function Seminars() {
                   </button>
                 </div>
 
-                <form onSubmit={handleFormSubmit} className="space-y-3">
+                <form onSubmit={(e) => handleFormSubmit(e).catch(console.error)} className="space-y-3">
                   <div className="space-y-1">
                     <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
                     <div className="relative">
@@ -857,7 +833,7 @@ export default function Seminars() {
                       </div>
 
                       <button 
-                        onClick={handleKeyActivation}
+                        onClick={() => handleKeyActivation().catch(console.error)}
                         disabled={isActivating || !subKey.trim()}
                         className="w-full h-[45px] bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[15px] rounded-lg transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
                       >

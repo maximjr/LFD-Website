@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import { collection, query, where, getDocs, doc, onSnapshot, Timestamp } from 'firebase/firestore';
 import CustomVideoPlayer from '../components/CustomVideoPlayer';
 
@@ -51,12 +52,12 @@ export default function LiveSeminars() {
           setHasAccess(false);
         }
       } catch (error) {
-        console.error("Error checking access:", error);
+        handleFirestoreError(error, OperationType.GET, 'subscriptions');
         setHasAccess(false);
       }
     }
 
-    checkUserAccess();
+    checkUserAccess().catch((e) => console.error("checkUserAccess failed:", e));
   }, [currentUser, isAdmin]);
 
   useEffect(() => {
@@ -66,6 +67,8 @@ export default function LiveSeminars() {
         if (docSnap.exists()) {
           setStreamConfig(docSnap.data());
         }
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, 'streamConfig/default');
       });
       return () => unsubscribe();
     }

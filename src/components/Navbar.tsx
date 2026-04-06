@@ -90,7 +90,7 @@ export default function Navbar() {
               ))}
               {currentUser ? (
                 <button
-                  onClick={handleLogout}
+                  onClick={() => handleLogout().catch(console.error)}
                   className="text-sm font-semibold text-slate-600 hover:text-rose-600 transition-colors flex items-center gap-1"
                 >
                   <LogOut className="w-4 h-4" /> Logout
@@ -153,7 +153,7 @@ export default function Navbar() {
               ))}
               {currentUser ? (
                 <button
-                  onClick={handleLogout}
+                  onClick={() => handleLogout().catch(console.error)}
                   className="w-full text-left block px-4 py-3 rounded-xl text-base font-semibold text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-2"
                 >
                   <LogOut className="w-5 h-5" /> Logout

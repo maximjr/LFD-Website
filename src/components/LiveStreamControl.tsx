@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import { Video, Settings, Save, Youtube } from 'lucide-react';
 
 export default function LiveStreamControl() {
@@ -27,6 +28,9 @@ export default function LiveStreamControl() {
           setYoutubeLink(`https://www.youtube.com/watch?v=${data.youtubeVideoId}`);
         }
       }
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'streamConfig/default');
       setLoading(false);
     });
 
@@ -86,7 +90,7 @@ export default function LiveStreamControl() {
           <p className="text-slate-500 mt-1">Manage your YouTube Live broadcast settings</p>
         </div>
         <button
-          onClick={handleSave}
+          onClick={() => handleSave().catch(console.error)}
           disabled={saving}
           className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-xl font-bold transition-all flex items-center gap-2 disabled:opacity-50"
         >

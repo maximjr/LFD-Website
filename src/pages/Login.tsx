@@ -7,6 +7,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfi
 import { auth, db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
 export default function Login() {
   const { currentUser, loading: authLoading } = useAuth();
@@ -58,14 +59,18 @@ export default function Login() {
       const user = result.user;
 
       // Check if user document exists, if not create it
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (!userDoc.exists()) {
-        await setDoc(doc(db, 'users', user.uid), {
-          displayName: user.displayName || 'Google User',
-          email: user.email,
-          role: 'user',
-          createdAt: serverTimestamp()
-        });
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (!userDoc.exists()) {
+          await setDoc(doc(db, 'users', user.uid), {
+            displayName: user.displayName || 'Google User',
+            email: user.email,
+            role: 'user',
+            createdAt: serverTimestamp()
+          });
+        }
+      } catch (firestoreErr) {
+        handleFirestoreError(firestoreErr, OperationType.GET, 'users');
       }
       
       navigate('/');
@@ -96,12 +101,16 @@ export default function Login() {
           await updateProfile(userCredential.user, { displayName: name });
           
           // Create user document in Firestore
-          await setDoc(doc(db, 'users', userCredential.user.uid), {
-            displayName: name,
-            email: email,
-            role: 'user',
-            createdAt: serverTimestamp()
-          });
+          try {
+            await setDoc(doc(db, 'users', userCredential.user.uid), {
+              displayName: name,
+              email: email,
+              role: 'user',
+              createdAt: serverTimestamp()
+            });
+          } catch (firestoreErr) {
+            handleFirestoreError(firestoreErr, OperationType.WRITE, 'users');
+          }
         }
         navigate('/');
       }
@@ -180,7 +189,13 @@ export default function Login() {
           </div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={isForgotPassword ? handleResetPassword : handleSubmit}>
+        <form className="mt-8 space-y-6" onSubmit={(e) => {
+          if (isForgotPassword) {
+            handleResetPassword(e).catch(console.error);
+          } else {
+            handleSubmit(e).catch(console.error);
+          }
+        }}>
           <div className="space-y-5">
             {!isLogin && !isForgotPassword && (
               <div>
@@ -344,7 +359,7 @@ export default function Login() {
             <div className="mt-6">
               <button
                 type="button"
-                onClick={handleGoogleSignIn}
+                onClick={() => handleGoogleSignIn().catch(console.error)}
                 disabled={loading}
                 className="w-full flex items-center justify-center px-4 py-3.5 border border-slate-200 rounded-2xl shadow-sm bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
               >
