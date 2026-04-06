@@ -9,6 +9,7 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy load pages
 const Home = lazy(() => import('./pages/Home'));
@@ -30,56 +31,58 @@ const PageLoader = () => (
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="min-h-screen flex flex-col font-sans text-gray-800">
-          <Navbar />
-          <main className="flex-grow">
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/about" element={<About />} />
-                <Route path="/products" element={<Products />} />
-                <Route 
-                  path="/seminars" 
-                  element={
-                    <ProtectedRoute>
-                      <Seminars />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="/activate" 
-                  element={
-                    <ProtectedRoute>
-                      <Activation />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="/live-seminars" 
-                  element={
-                    <ProtectedRoute>
-                      <LiveSeminars />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route path="/contact" element={<Contact />} />
-                <Route path="/login" element={<Login />} />
-                <Route 
-                  path="/admin" 
-                  element={
-                    <ProtectedRoute adminOnly>
-                      <AdminDashboard />
-                    </ProtectedRoute>
-                  } 
-                />
-              </Routes>
-            </Suspense>
-          </main>
-          <Footer />
-        </div>
-      </Router>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <div className="min-h-screen flex flex-col font-sans text-gray-800">
+            <Navbar />
+            <main className="flex-grow">
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/products" element={<Products />} />
+                  <Route 
+                    path="/seminars" 
+                    element={
+                      <ProtectedRoute>
+                        <Seminars />
+                      </ProtectedRoute>
+                    } 
+                  />
+                  <Route 
+                    path="/activate" 
+                    element={
+                      <ProtectedRoute>
+                        <Activation />
+                      </ProtectedRoute>
+                    } 
+                  />
+                  <Route 
+                    path="/live-seminars" 
+                    element={
+                      <ProtectedRoute>
+                        <LiveSeminars />
+                      </ProtectedRoute>
+                    } 
+                  />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route 
+                    path="/admin" 
+                    element={
+                      <ProtectedRoute adminOnly>
+                        <AdminDashboard />
+                      </ProtectedRoute>
+                    } 
+                  />
+                </Routes>
+              </Suspense>
+            </main>
+            <Footer />
+          </div>
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
