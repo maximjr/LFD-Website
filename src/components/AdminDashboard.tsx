@@ -15,7 +15,6 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import { 
   CheckCircle, 
   XCircle, 
@@ -73,10 +72,9 @@ interface ActivationKey {
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'subscriptions' | 'livestream' | 'trash' | 'retries'>('subscriptions');
+  const [activeTab, setActiveTab] = useState<'subscriptions' | 'livestream' | 'trash'>('subscriptions');
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [activationKeys, setActivationKeys] = useState<ActivationKey[]>([]);
-  const [retryLogs, setRetryLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -131,7 +129,8 @@ const AdminDashboard: React.FC = () => {
       });
       setSubscriptions(subs);
     }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'subscriptions');
+      console.error("Firestore error (subs):", err);
+      setError("Failed to fetch subscriptions.");
     });
 
     const unsubscribeKeys = onSnapshot(qKeys, (snapshot) => {
@@ -142,7 +141,8 @@ const AdminDashboard: React.FC = () => {
       setActivationKeys(keys);
       setLoading(false);
     }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'activationKeys');
+      console.error("Firestore error (keys):", err);
+      setLoading(false);
     });
 
     return () => {
@@ -150,36 +150,6 @@ const AdminDashboard: React.FC = () => {
       unsubscribeKeys();
     };
   }, []);
-
-  const handleRunNotifications = async () => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Send System Notifications',
-      message: 'Are you sure you want to process system notifications? This will send emails for upcoming seminars, renewals, and new content to all active subscribers.',
-      onConfirm: async () => {
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-        try {
-          const token = await auth.currentUser?.getIdToken();
-          const response = await fetch('/api/admin/notifications/run', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          const data = await response.json();
-          if (data.success) {
-            alert("Notifications processed successfully!");
-          } else {
-            alert("Notification processing failed: " + data.message);
-          }
-        } catch (error) {
-          console.error("Error triggering notifications:", error);
-          alert("An error occurred while triggering notifications.");
-        }
-      }
-    });
-  };
 
   const handleResendEmail = async (keyId: string) => {
     try {
@@ -206,46 +176,11 @@ const AdminDashboard: React.FC = () => {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
-          const token = await auth.currentUser?.getIdToken();
-          let response;
-          try {
-            response = await fetch('/api/admin/maintenance/run', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            });
-          } catch (networkError) {
-            console.error("Network error:", networkError);
-            alert("Network error. Please check your connection.");
-            return;
-          }
-
-          console.log("Response status:", response.status);
-
-          if (!response || response.status === 204) {
-            console.warn("Empty response received");
-            alert("Received an empty response from the server.");
-            return;
-          }
-
-          let data = null;
-          const contentType = response.headers.get("content-type");
+          const response = await fetch('/api/admin/maintenance', {
+            method: 'POST',
+          });
           
-          if (contentType && contentType.includes("application/json")) {
-            try {
-              data = await response.json();
-            } catch (jsonError) {
-              console.error("JSON parsing error:", jsonError);
-              alert("The server returned an invalid response format.");
-              return;
-            }
-          } else {
-            console.warn("Response is not JSON");
-            alert("The server returned a non-JSON response.");
-            return;
-          }
-          
+          const data = await response.json();
           if (data.success) {
             alert("Maintenance completed successfully! Check the server logs for details.");
           } else {
@@ -259,32 +194,9 @@ const AdminDashboard: React.FC = () => {
     });
   };
 
-  useEffect(() => {
-    if (activeTab === 'retries') {
-      const fetchRetries = async () => {
-        try {
-          const token = await auth.currentUser?.getIdToken();
-          const response = await fetch('/api/admin/retries', {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          const data = await response.json();
-          if (data.success) {
-            setRetryLogs(data.data);
-          }
-        } catch (err) {
-          console.error("Error fetching retries:", err);
-        }
-      };
-      fetchRetries();
-    }
-  }, [activeTab]);
-
   const generateMockData = async () => {
     const mockData = [
       {
-        userId: "mock-user-1",
         name: "John Doe",
         email: "john@example.com",
         phone: "+1 234 567 890",
@@ -294,7 +206,6 @@ const AdminDashboard: React.FC = () => {
         createdAt: Timestamp.now()
       },
       {
-        userId: "mock-user-2",
         name: "Jane Smith",
         email: "jane@example.com",
         phone: "+1 987 654 321",
@@ -306,7 +217,6 @@ const AdminDashboard: React.FC = () => {
         expiryDate: Timestamp.fromDate(new Date(Date.now() + 31536000000))
       },
       {
-        userId: "mock-user-3",
         name: "Robert Johnson",
         email: "robert@example.com",
         phone: "+1 555 012 345",
@@ -573,15 +483,7 @@ const AdminDashboard: React.FC = () => {
           </div>
           <div className="flex items-center gap-3">
             <button 
-              onClick={() => handleRunNotifications().catch(console.error)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 font-semibold rounded-lg hover:bg-blue-100 transition-colors shadow-sm"
-              title="Process System Notifications"
-            >
-              <Mail size={18} />
-              Send Notifications
-            </button>
-            <button 
-              onClick={() => handleRunMaintenance().catch(console.error)}
+              onClick={handleRunMaintenance}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold rounded-lg hover:bg-emerald-100 transition-colors shadow-sm"
               title="Run System Maintenance"
             >
@@ -589,7 +491,7 @@ const AdminDashboard: React.FC = () => {
               Run Maintenance
             </button>
             <button 
-              onClick={() => handleLogout().catch(console.error)}
+              onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
               <LogOut size={18} />
@@ -631,85 +533,10 @@ const AdminDashboard: React.FC = () => {
             <Video className="w-4 h-4" />
             Live Stream Control
           </button>
-          <button
-            onClick={() => setActiveTab('retries')}
-            className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'retries'
-                ? 'border-amber-600 text-amber-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <RefreshCw className="w-4 h-4" />
-            Retry Monitoring
-          </button>
         </div>
 
         {activeTab === 'livestream' ? (
           <LiveStreamControl />
-        ) : activeTab === 'retries' ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">Subscription Retry Logs</h2>
-              <button 
-                onClick={() => {
-                  const fetchRetries = async () => {
-                    try {
-                      const token = await auth.currentUser?.getIdToken();
-                      const response = await fetch('/api/admin/retries', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                      });
-                      const data = await response.json();
-                      if (data.success) setRetryLogs(data.data);
-                    } catch (err) { console.error(err); }
-                  };
-                  fetchRetries();
-                }}
-                className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
-              >
-                <RefreshCw size={20} />
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Attempt</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Error</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {retryLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">No retry logs found.</td>
-                    </tr>
-                  ) : (
-                    retryLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{log.email}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{log.attempt}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 text-xs font-bold rounded-full ${
-                            log.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            {log.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={log.errorDetails}>
-                          {log.errorDetails || '-'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          {new Date(log.timestamp._seconds * 1000).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
         ) : (
           <>
             {subscriptions.length === 0 && !loading && (
@@ -722,11 +549,7 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-blue-700 text-sm">Would you like to generate some mock subscription requests for testing?</p>
                 </div>
             <button 
-              onClick={() => {
-                if (process.env.NODE_ENV === "development") {
-                  generateMockData().catch(console.error);
-                }
-              }}
+              onClick={generateMockData}
               className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
             >
               Generate Mock Data
@@ -981,7 +804,7 @@ const AdminDashboard: React.FC = () => {
                                 </div>
                                 {latestKey.emailStatus !== 'sent' && (
                                   <button 
-                                    onClick={() => handleResendEmail(latestKey.id).catch(console.error)}
+                                    onClick={() => handleResendEmail(latestKey.id)}
                                     disabled={processingId === latestKey.id}
                                     className="text-[10px] text-emerald-600 hover:text-emerald-700 font-bold underline text-left disabled:opacity-50"
                                   >
@@ -1022,14 +845,14 @@ const AdminDashboard: React.FC = () => {
                           {activeTab === 'trash' ? (
                             <>
                               <button 
-                                onClick={() => handleRestore(sub).catch(console.error)}
+                                onClick={() => handleRestore(sub)}
                                 disabled={processingId === sub.id}
                                 className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {processingId === sub.id ? '...' : 'Restore'}
                               </button>
                               <button 
-                                onClick={() => handlePermanentDelete(sub).catch(console.error)}
+                                onClick={() => handlePermanentDelete(sub)}
                                 disabled={processingId === sub.id}
                                 className="px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                               >
@@ -1041,14 +864,14 @@ const AdminDashboard: React.FC = () => {
                               {sub.status !== 'active' && (
                                 <>
                                   <button 
-                                    onClick={() => handleActivate(sub.id, sub.planType).catch(console.error)}
+                                    onClick={() => handleActivate(sub.id, sub.planType)}
                                     disabled={processingId === sub.id}
                                     className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     {processingId === sub.id ? '...' : 'Activate'}
                                   </button>
                                   <button 
-                                    onClick={() => handleGenerateKey(sub).catch(console.error)}
+                                    onClick={() => handleGenerateKey(sub)}
                                     disabled={processingId === sub.id}
                                     className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                                     title="Generate Unique Activation Key"
@@ -1059,7 +882,7 @@ const AdminDashboard: React.FC = () => {
                               )}
                               {sub.status === 'active' && (
                                 <button 
-                                  onClick={() => handleSoftDelete(sub).catch(console.error)}
+                                  onClick={() => handleSoftDelete(sub)}
                                   disabled={processingId === sub.id}
                                   className="px-3 py-1.5 bg-white border border-rose-200 text-rose-600 text-xs font-bold rounded-lg hover:bg-rose-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -1067,7 +890,7 @@ const AdminDashboard: React.FC = () => {
                                 </button>
                               )}
                               <button 
-                                onClick={() => handlePermanentDelete(sub).catch(console.error)}
+                                onClick={() => handlePermanentDelete(sub)}
                                 disabled={processingId === sub.id}
                                 className="px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                               >

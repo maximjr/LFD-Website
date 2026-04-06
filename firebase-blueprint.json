@@ -92,53 +92,6 @@
         "attempts": { "type": "integer" }
       },
       "required": ["userId", "email", "activationCode", "subscriptionId", "activationStatus", "createdAt", "expirationTime"]
-    },
-    "Seminar": {
-      "title": "Seminar",
-      "description": "A scheduled health seminar or training program.",
-      "type": "object",
-      "properties": {
-        "title": { "type": "string" },
-        "description": { "type": "string" },
-        "startTime": { "type": "string", "format": "date-time" },
-        "durationMinutes": { "type": "integer" },
-        "speaker": { "type": "string" },
-        "category": { "type": "string" },
-        "status": { "type": "string", "enum": ["scheduled", "live", "ended", "cancelled"] },
-        "youtubeVideoId": { "type": "string" },
-        "notificationsSent": { "type": "boolean", "description": "Whether upcoming notifications have been sent." },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["title", "startTime", "status", "createdAt"]
-    },
-    "Content": {
-      "title": "Content",
-      "description": "New health content or resources added to the platform.",
-      "type": "object",
-      "properties": {
-        "title": { "type": "string" },
-        "description": { "type": "string" },
-        "type": { "type": "string", "enum": ["article", "video", "guide", "resource"] },
-        "url": { "type": "string" },
-        "notificationsSent": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["title", "type", "createdAt"]
-    },
-    "SubscriptionRetryLog": {
-      "title": "SubscriptionRetryLog",
-      "description": "Log of failed subscription retry attempts.",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "subscriptionId": { "type": "string" },
-        "attemptNumber": { "type": "integer" },
-        "status": { "type": "string", "enum": ["pending", "retrying", "success", "failed"] },
-        "errorMessage": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" },
-        "nextRetryAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["userId", "subscriptionId", "attemptNumber", "status", "timestamp"]
     }
   },
   "firestore": {
@@ -165,18 +118,6 @@
     "/activationCodes/{codeId}": {
       "schema": "ActivationCode",
       "description": "Collection of hashed activation codes."
-    },
-    "/seminars/{seminarId}": {
-      "schema": "Seminar",
-      "description": "Collection of scheduled seminars."
-    },
-    "/content/{contentId}": {
-      "schema": "Content",
-      "description": "Collection of new health content and resources."
-    },
-    "/subscriptionRetryLogs/{logId}": {
-      "schema": "SubscriptionRetryLog",
-      "description": "Collection of subscription retry logs."
     }
   }
 }

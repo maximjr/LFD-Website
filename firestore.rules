@@ -60,10 +60,6 @@ service cloud.firestore {
          (request.auth.token.email == "Obenmaxjr@gmail.com" && request.auth.token.email_verified == true));
     }
 
-    function isUser() {
-      return isAuthenticated();
-    }
-
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'role']) &&
              data.email is string &&
@@ -73,82 +69,47 @@ service cloud.firestore {
     function isValidSubscription(data) {
       return data.keys().hasAll(['userId', 'name', 'email', 'phone', 'planType', 'status', 'createdAt']) &&
              data.userId is string &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.email is string && data.email.size() > 0 && data.email.size() < 100 &&
-             data.phone is string && data.phone.size() > 0 && data.phone.size() < 20 &&
+             data.name is string &&
+             data.email is string &&
+             data.phone is string &&
              data.planType in ['monthly', 'yearly'] &&
              data.status in ['pending', 'active', 'expired', 'deleted'] &&
              (!('deleted' in data) || data.deleted is bool) &&
-             (!('deletedAt' in data) || data.deletedAt == null || data.deletedAt is timestamp) &&
-             (!('renewalNoticeSent' in data) || data.renewalNoticeSent is bool);
-    }
-
-    function isValidSeminar(data) {
-      return data.keys().hasAll(['title', 'startTime', 'status', 'createdAt']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
-             data.startTime is timestamp &&
-             data.status in ['scheduled', 'live', 'ended', 'cancelled'] &&
-             data.createdAt is timestamp &&
-             (!('description' in data) || data.description is string) &&
-             (!('speaker' in data) || data.speaker is string) &&
-             (!('category' in data) || data.category is string) &&
-             (!('youtubeVideoId' in data) || data.youtubeVideoId is string) &&
-             (!('notificationsSent' in data) || data.notificationsSent is bool);
-    }
-
-    function isValidContent(data) {
-      return data.keys().hasAll(['title', 'type', 'createdAt']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
-             data.type in ['article', 'video', 'guide', 'resource'] &&
-             data.createdAt is timestamp &&
-             (!('description' in data) || data.description is string) &&
-             (!('url' in data) || data.url is string) &&
-             (!('notificationsSent' in data) || data.notificationsSent is bool);
+             (!('deletedAt' in data) || data.deletedAt == null || data.deletedAt is timestamp);
     }
 
     function isValidActivationKey(data) {
       return data.keys().hasAll(['userId', 'email', 'plan', 'durationDays', 'key', 'status', 'createdAt']) &&
              data.userId is string &&
-             data.email is string && data.email.size() > 0 && data.email.size() < 100 &&
+             data.email is string &&
              data.plan in ['monthly', 'yearly'] &&
              data.durationDays is int &&
-             data.key is string && data.key.size() > 0 && data.key.size() < 50 &&
+             data.key is string &&
              data.status in ['unused', 'used'] &&
-             (!('deleted' in data) || data.deleted is bool) &&
-             (!('expiresAt' in data) || data.expiresAt == null || data.expiresAt is timestamp) &&
-             (!('emailSent' in data) || data.emailSent is bool) &&
-             (!('emailStatus' in data) || data.emailStatus is string && data.emailStatus.size() < 50) &&
-             (!('emailAttempts' in data) || data.emailAttempts is int) &&
-             (!('emailSentAt' in data) || data.emailSentAt is timestamp) &&
-             (!('emailError' in data) || data.emailError is string && data.emailError.size() < 200);
-    }
-
-    match /test/connection {
-      allow read: if true;
+             (!('deleted' in data) || data.deleted is bool);
     }
 
     match /users/{userId} {
-      allow read: if isUser();
+      allow read: if isAuthenticated();
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'user';
       allow update: if isAdmin() || (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role);
     }
 
     match /subscriptions/{subId} {
-      allow read: if isUser() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isUser() && request.resource.data.userId == request.auth.uid && isValidSubscription(request.resource.data);
-      allow update: if isAdmin() || (isUser() && resource.data.userId == request.auth.uid && isValidSubscription(request.resource.data));
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidSubscription(request.resource.data);
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && isValidSubscription(request.resource.data));
       allow delete: if isAdmin();
     }
 
     match /activationKeys/{keyId} {
-      allow read: if isAdmin() || (isUser() && resource.data.userId == request.auth.uid);
-      allow create: if isAdmin() && isValidActivationKey(request.resource.data);
-      allow update: if isAdmin() || 
-                    (isUser() && resource.data.userId == request.auth.uid && 
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+      // Allow user to update status to 'used' when validating
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && 
                     request.resource.data.status == 'used' && 
                     resource.data.status == 'unused' &&
-                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'expiresAt']));
-      allow delete: if isAdmin();
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'expiresAt']);
     }
 
     match /maintenanceLogs/{logId} {
@@ -170,16 +131,6 @@ service cloud.firestore {
     match /activationCodes/{codeId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow write: if false; // Only written by backend server
-    }
-
-    match /seminars/{seminarId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() && isValidSeminar(request.resource.data);
-    }
-
-    match /content/{contentId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() && isValidContent(request.resource.data);
     }
   }
 }

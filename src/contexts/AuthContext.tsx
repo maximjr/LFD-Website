@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, getIdTokenResult } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import { auth, db } from '../firebase';
 
 interface AuthContextType {
@@ -22,56 +21,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      const handleAuthChange = async () => {
-        setCurrentUser(user);
-        
-        if (user) {
-          try {
-            // 1. Check Custom Claims
-            const tokenResult = await getIdTokenResult(user);
-            if (tokenResult.claims.admin) {
-              setIsAdmin(true);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      
+      if (user) {
+        try {
+          // 1. Check Custom Claims
+          const tokenResult = await getIdTokenResult(user);
+          if (tokenResult.claims.admin) {
+            setIsAdmin(true);
+          } else {
+            // 2. Check Firestore Role
+            const userDocRef = doc(db, "users", user.uid);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (userDoc.exists()) {
+              setIsAdmin(userDoc.data().role === "admin");
             } else {
-              // 2. Check Firestore Role
-              const userDocRef = doc(db, "users", user.uid);
-              const userDoc = await getDoc(userDocRef);
-              
-              if (userDoc.exists()) {
-                setIsAdmin(userDoc.data().role === "admin");
+              // 3. Default Admin Check
+              if (user.email === "Obenmaxjr@gmail.com") {
+                await setDoc(userDocRef, {
+                  email: user.email,
+                  role: "admin",
+                  displayName: user.displayName || "Admin"
+                });
+                setIsAdmin(true);
               } else {
-                // 3. Default Admin Check
-                if (user.email === "Obenmaxjr@gmail.com") {
-                  await setDoc(userDocRef, {
-                    email: user.email,
-                    role: "admin",
-                    displayName: user.displayName || "Admin"
-                  });
-                  setIsAdmin(true);
-                } else {
-                  await setDoc(userDocRef, {
-                    email: user.email,
-                    role: "user",
-                    displayName: user.displayName || "User"
-                  });
-                  setIsAdmin(false);
-                }
+                await setDoc(userDocRef, {
+                  email: user.email,
+                  role: "user",
+                  displayName: user.displayName || "User"
+                });
+                setIsAdmin(false);
               }
             }
-          } catch (err) {
-            setIsAdmin(false);
-            setLoading(false);
-            handleFirestoreError(err, OperationType.GET, 'users');
-            return;
           }
-        } else {
+        } catch (err) {
+          console.error("Error checking admin status:", err);
           setIsAdmin(false);
         }
-        
-        setLoading(false);
-      };
-
-      handleAuthChange().catch(console.error);
+      } else {
+        setIsAdmin(false);
+      }
+      
+      setLoading(false);
     });
 
     return unsubscribe;

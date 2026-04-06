@@ -24,51 +24,21 @@ export default function Activation() {
     setIsVerifying(true);
 
     try {
-      const token = await currentUser.getIdToken();
-      let response;
-      try {
-        response = await fetch('/api/activations', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            userId: currentUser.uid,
-            code: code.trim(),
-          }),
-        });
-      } catch (networkError) {
-        console.error("Network error:", networkError);
-        throw new Error("Network error. Please check your connection and try again.");
-      }
+      const response = await fetch('/api/activate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.uid,
+          code: code.trim(),
+        }),
+      });
 
-      if (response) {
-        console.log("Response status:", response.status);
-      }
-
-      if (!response || response.status === 204) {
-        console.warn("Empty response received");
-        throw new Error("Received an empty response from the server.");
-      }
-
-      let data = null;
-      const contentType = response.headers.get("content-type");
-      
-      if (contentType && contentType.includes("application/json")) {
-        try {
-          data = await response.json();
-        } catch (jsonError) {
-          console.error("JSON parsing error:", jsonError);
-          throw new Error("The server returned an invalid response format.");
-        }
-      } else {
-        console.warn("Response is not JSON");
-        throw new Error("The server returned a non-JSON response.");
-      }
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.message || data?.error?.details || 'Verification failed');
+        throw new Error(data.error || 'Verification failed');
       }
 
       setSuccess(true);
@@ -140,7 +110,7 @@ export default function Activation() {
               </div>
             </motion.div>
           ) : (
-            <form onSubmit={(e) => handleVerify(e).catch(console.error)} className="space-y-6">
+            <form onSubmit={handleVerify} className="space-y-6">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">
                   Activation Code
